@@ -86,6 +86,9 @@ REVERB_EXPOSE_PORT=18081
 - `AUTO_INSTALL_ONCE=true` 由生产 `init` 服务在迁移后运行 `php artisan geoflow:install`；该命令只在空库首次安装时执行安装填充，旧库只补初始化标记。
 - 生产镜像不会在启动时执行 `composer install`
 - **`postgres` / `redis` 凭据**：`docker-compose.prod.yml` 中 postgres 使用 `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` 映射为官方镜像的 `POSTGRES_*`；redis 使用 `REDIS_PASSWORD`；值均由 Compose 插值（推荐 `--env-file .env.prod`），与 Laravel 的 `DB_*` 同源、不重复定义。
+- **Redis 持久化**：生产编排启用 AOF，并将 `/data` 挂载到命名卷 `geoflow-redis-prod-data`。备份生产环境时需同时备份该卷；恢复时应先停止 queue、scheduler、app 和 reverb，再恢复 Redis 数据。
+- **队列超时顺序**：生产 worker 的 `--timeout=900`，因此 `REDIS_QUEUE_RETRY_AFTER` 必须更大，默认建议 `960`。worker 会监听 `geoflow`、`distribution`、`theme-replication`、`system-updates` 和 `default` 队列。
+- **缓存构建边界**：仅一次性 `init` 服务执行 `php artisan optimize`；常驻 app、queue、scheduler 和 reverb 禁止并发重建共享视图缓存。
 - **建议仍使用 `--env-file .env.prod`**：便于插值 `WEB_PORT`、`POSTGRES_DATA_DIR` 等与根目录 `.env` 对齐；若曾用错误密码初始化过 Postgres，须删掉 `POSTGRES_DATA_DIR` 对应数据目录后再启动。
 
 ## 3. 启动步骤

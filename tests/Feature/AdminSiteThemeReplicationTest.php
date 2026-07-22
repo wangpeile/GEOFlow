@@ -89,11 +89,17 @@ class AdminSiteThemeReplicationTest extends TestCase
 
     public function test_docker_queue_workers_listen_to_theme_replication_queue(): void
     {
-        foreach (['docker-compose.yml', 'docker-compose.prod.yml'] as $composeFile) {
+        $expectations = [
+            'docker-compose.yml' => '--queue=geoflow,distribution,theme-replication,default',
+            'docker-compose.prod.yml' => '--queue=geoflow,distribution,theme-replication,system-updates,default',
+            'docker-compose.prebuilt.yml' => '--queue=geoflow,distribution,theme-replication,system-updates,default',
+        ];
+
+        foreach ($expectations as $composeFile => $expectedQueues) {
             $content = File::get(base_path($composeFile));
 
             $this->assertStringContainsString(
-                '--queue=geoflow,distribution,theme-replication,default',
+                $expectedQueues,
                 $content,
                 $composeFile.' must consume the queue used by theme replication jobs.'
             );

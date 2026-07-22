@@ -9,15 +9,33 @@ class DistributionQueueConfigurationTest extends TestCase
     public function test_docker_queue_workers_listen_to_distribution_queue(): void
     {
         $root = dirname(__DIR__, 2);
-        $composeFiles = [
-            $root.'/docker-compose.yml',
-            $root.'/docker-compose.prod.yml',
+        $composeExpectations = [
+            $root.'/docker-compose.yml' => '--queue=geoflow,distribution,theme-replication,default',
+            $root.'/docker-compose.prod.yml' => '--queue=geoflow,distribution,theme-replication,system-updates,default',
+            $root.'/docker-compose.prebuilt.yml' => '--queue=geoflow,distribution,theme-replication,system-updates,default',
         ];
 
-        foreach ($composeFiles as $composeFile) {
+        foreach ($composeExpectations as $composeFile => $expectedQueues) {
             $contents = file_get_contents($composeFile);
             $this->assertIsString($contents);
-            $this->assertStringContainsString('--queue=geoflow,distribution,theme-replication,default', $contents, basename($composeFile));
+            $this->assertStringContainsString($expectedQueues, $contents, basename($composeFile));
+        }
+    }
+
+    public function test_production_workers_use_persistent_redis_and_safe_timeout_ordering(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $environment = file_get_contents($root.'/.env.prod.example');
+
+        $this->assertIsString($environment);
+        $this->assertStringContainsString('REDIS_QUEUE_RETRY_AFTER=960', $environment);
+
+        foreach (['docker-compose.prod.yml', 'docker-compose.prebuilt.yml'] as $composeFile) {
+            $contents = file_get_contents($root.'/'.$composeFile);
+            $this->assertIsString($contents);
+            $this->assertStringContainsString('geoflow-redis-prod-data:/data', $contents, $composeFile);
+            $this->assertStringContainsString('--timeout=900', $contents, $composeFile);
+            $this->assertStringContainsString('AUTO_OPTIMIZE: "false"', $contents, $composeFile);
         }
     }
 

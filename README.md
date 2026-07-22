@@ -372,6 +372,8 @@ php artisan geoflow:admin-unlock admin
 
 Compose 将 **`./storage`** 与 **`./.env`** 挂载进容器；应用代码在镜像内。若要用于正式生产，请改用仓库新增的 **`docker-compose.prod.yml`**（`Nginx + php-fpm`），并参见 `docs/deployment/DEPLOYMENT.md`。
 
+生产编排使用 Redis AOF 命名卷持久化队列、缓存与会话；生产 worker 超时为 900 秒，`.env.prod` 的 `REDIS_QUEUE_RETRY_AFTER` 应保持大于该值（推荐 960 秒）。生产常驻容器不并发生成 Laravel 缓存，缓存统一由一次性 `init` 服务构建。
+
 **已有部署升级：** 禁止直接执行 `git pull` → `build` → `up -d`。请完整执行 [`docs/deployment/DEPLOYMENT.md` 3.1 节](docs/deployment/DEPLOYMENT.md#31-受管图片删除升级门禁)的停机排空、安全迁移和 readiness 流程。
 
 ---
