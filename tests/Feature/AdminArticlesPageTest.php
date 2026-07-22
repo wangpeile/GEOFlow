@@ -55,6 +55,8 @@ class AdminArticlesPageTest extends TestCase
 
     public function test_articles_page_shows_content_engineering_workbench_with_pipeline_counts(): void
     {
+        config(['geoflow.admin_features.analytics_and_leads' => true]);
+
         $admin = Admin::query()->create([
             'username' => 'articles_workbench_admin',
             'password' => 'secret-123',

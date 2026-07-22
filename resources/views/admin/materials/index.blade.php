@@ -123,10 +123,12 @@
                                 <i data-lucide="plus" class="mr-2 h-4 w-4"></i>
                                 {{ __('admin.materials.knowledge_hub_create') }}
                             </a>
-                            <a href="{{ route('admin.enterprise-knowledge.create') }}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50">
-                                <i data-lucide="sparkles" class="mr-2 h-4 w-4"></i>
-                                {{ __('admin.materials.knowledge_hub_enterprise') }}
-                            </a>
+                            @if (config('geoflow.admin_features.enterprise_knowledge', true))
+                                <a href="{{ route('admin.enterprise-knowledge.create') }}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50">
+                                    <i data-lucide="sparkles" class="mr-2 h-4 w-4"></i>
+                                    {{ __('admin.materials.knowledge_hub_enterprise') }}
+                                </a>
+                            @endif
                             <a href="{{ route('admin.knowledge-bases.index') }}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50">
                                 <i data-lucide="database" class="mr-2 h-4 w-4"></i>
                                 {{ __('admin.materials.manage_knowledge_bases') }}
@@ -262,7 +264,7 @@
                             <i data-lucide="refresh-cw" class="mr-2 h-4 w-4"></i>
                             {{ __('admin.materials.knowledge_hub_refresh_chunks') }}
                         </a>
-                        @if ($canManageProtectedWorkflows)
+                        @if ($canManageProtectedWorkflows && config('geoflow.admin_features.url_import', true))
                         <a href="{{ route('admin.url-import') }}" class="inline-flex items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100">
                             <i data-lucide="globe" class="mr-2 h-4 w-4"></i>
                             {{ __('admin.materials.knowledge_hub_import_from_url') }}
@@ -303,7 +305,7 @@
             </div>
         </section>
 
-        @if ($canManageProtectedWorkflows)
+        @if ($canManageProtectedWorkflows && config('geoflow.admin_features.url_import', true))
         <section class="mb-8 overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
             <div class="p-6 lg:p-8">
                 <div class="max-w-5xl">

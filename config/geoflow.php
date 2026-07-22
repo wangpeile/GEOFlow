@@ -33,6 +33,16 @@ return [
     // 后台入口路径前缀，如 /geo_admin（勿与前台路由冲突）
     'admin_base_path' => '/'.$adminBasePath,
 
+    // 定制版后台入口可见性：仅隐藏导航入口，不禁用路由与数据，便于按需恢复及同步上游。
+    'admin_features' => [
+        'analytics_and_leads' => filter_var(env('GEOFLOW_ADMIN_SHOW_ANALYTICS_AND_LEADS', false), FILTER_VALIDATE_BOOLEAN),
+        'enterprise_knowledge' => filter_var(env('GEOFLOW_ADMIN_SHOW_ENTERPRISE_KNOWLEDGE', true), FILTER_VALIDATE_BOOLEAN),
+        'url_import' => filter_var(env('GEOFLOW_ADMIN_SHOW_URL_IMPORT', true), FILTER_VALIDATE_BOOLEAN),
+        'theme_replication' => filter_var(env('GEOFLOW_ADMIN_SHOW_THEME_REPLICATION', false), FILTER_VALIDATE_BOOLEAN),
+        'update_center' => filter_var(env('GEOFLOW_ADMIN_SHOW_UPDATE_CENTER', false), FILTER_VALIDATE_BOOLEAN),
+        'api_tokens' => filter_var(env('GEOFLOW_ADMIN_SHOW_API_TOKENS', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     // 前台 Blade 使用的 Laravel 翻译 locale（与 APP_LOCALE、后台会话语言独立；对齐旧站中文导航）
     'public_locale' => env('GEOFLOW_PUBLIC_LOCALE', 'zh_CN'),
     // 默认前台主题；后台未显式选择主题时使用

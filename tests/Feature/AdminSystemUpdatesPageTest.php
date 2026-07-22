@@ -48,6 +48,7 @@ class AdminSystemUpdatesPageTest extends TestCase
             'geoflow.app_version' => '2.0.2',
             'geoflow.update_check_enabled' => true,
             'geoflow.update_metadata_url' => 'https://example.test/version.json',
+            'geoflow.admin_features.update_center' => true,
         ]);
 
         Http::fake([

@@ -79,6 +79,13 @@
                 'tone' => 'slate',
             ],
         ];
+        $showAnalyticsAndLeads = (bool) config('geoflow.admin_features.analytics_and_leads', false);
+        if (!$showAnalyticsAndLeads) {
+            $demoJourney = array_values(array_filter(
+                $demoJourney,
+                static fn (array $item): bool => $item['href'] !== route('admin.analytics'),
+            ));
+        }
 
         $stats = $dashboardStats ?? [];
         $todayStats = $dashboardTodayStats ?? [];
@@ -370,6 +377,21 @@
                 ],
             ],
         ];
+
+        if (!$showAnalyticsAndLeads) {
+            $flowNodes = array_values(array_filter(
+                $flowNodes,
+                static fn (array $item): bool => $item['title'] !== __('admin.dashboard.automation.node_measurement_title'),
+            ));
+            $healthCards = array_values(array_filter(
+                $healthCards,
+                static fn (array $item): bool => $item['title'] !== __('admin.dashboard.automation.health_feedback_title'),
+            ));
+            $lanes = array_values(array_filter(
+                $lanes,
+                static fn (array $item): bool => $item['title'] !== __('admin.dashboard.automation.lane_feedback_title'),
+            ));
+        }
 
         if (!$canManageProtectedWorkflows) {
             $demoJourney = array_values(array_filter(

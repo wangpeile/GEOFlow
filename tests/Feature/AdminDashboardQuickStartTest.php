@@ -13,6 +13,8 @@ class AdminDashboardQuickStartTest extends TestCase
 
     public function test_dashboard_shows_scenario_navigation_without_data_widgets(): void
     {
+        config(['geoflow.admin_features.analytics_and_leads' => true]);
+
         $admin = Admin::query()->create([
             'username' => 'dashboard_quick_start_admin',
             'password' => 'secret-123',

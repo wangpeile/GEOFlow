@@ -33,6 +33,13 @@ class AdminSiteThemeReplicationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['geoflow.admin_features.theme_replication' => true]);
+    }
+
     public function test_site_settings_page_shows_theme_replication_entry(): void
     {
         $this->actingAs($this->admin(), 'admin')

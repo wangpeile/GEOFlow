@@ -8,6 +8,10 @@
     $updateLinks = is_array($updateNotification['links'] ?? null) ? $updateNotification['links'] : [];
     $hasVersionUpdate = !empty($updateState['is_update_available']);
     $isUpdateCenterEnabled = (bool) config('geoflow.update_center_enabled', true);
+    $visibleAdminFeatures = (array) config('geoflow.admin_features', []);
+    $showAnalyticsAndLeads = (bool) ($visibleAdminFeatures['analytics_and_leads'] ?? false);
+    $showUpdateCenter = (bool) ($visibleAdminFeatures['update_center'] ?? false);
+    $showApiTokens = (bool) ($visibleAdminFeatures['api_tokens'] ?? false);
     $localeForChangelog = app()->getLocale() === 'en' ? 'en' : 'zh-CN';
     $updatePayload = is_array($updateState['payload'] ?? null) ? $updateState['payload'] : [];
     $updateSummary = (string) ($localeForChangelog === 'en'
@@ -16,11 +20,10 @@
     $changelogLinks = is_array($updateLinks['changelog'] ?? null) ? $updateLinks['changelog'] : [];
     $notificationChangelogUrl = (string) ($changelogLinks[$localeForChangelog] ?? $changelogLinks['zh-CN'] ?? 'https://github.com/yaojingang/GEOFlow/blob/main/docs/CHANGELOG.md');
     $notificationGithubUrl = (string) ($updateLinks['github'] ?? 'https://github.com/yaojingang/GEOFlow');
-    $notificationUpdateCenterUrl = $isUpdateCenterEnabled && $isSuperAdmin ? \App\Support\AdminWeb::routePath('admin.system-updates.index') : '';
+    $notificationUpdateCenterUrl = $isUpdateCenterEnabled && $showUpdateCenter && $isSuperAdmin ? \App\Support\AdminWeb::routePath('admin.system-updates.index') : '';
     $notificationStatus = (string) ($updateState['status'] ?? 'disabled');
     $menu = [
         'dashboard' => ['route' => 'admin.dashboard', 'name' => __('admin.nav.dashboard')],
-        'analytics' => ['route' => 'admin.analytics', 'name' => __('admin.nav.analytics')],
         'tasks' => ['route' => 'admin.tasks.index', 'name' => __('admin.nav.tasks')],
         'distribution' => ['route' => 'admin.distribution.index', 'name' => __('admin.nav.distribution')],
         'articles' => ['route' => 'admin.articles.index', 'name' => __('admin.nav.articles')],
@@ -28,6 +31,11 @@
         'ai_config' => ['route' => 'admin.ai.configurator', 'name' => __('admin.nav.ai_config')],
         'site_settings' => ['route' => 'admin.site-settings.index', 'name' => __('admin.nav.site_settings')],
     ];
+    if ($showAnalyticsAndLeads) {
+        $menu = array_slice($menu, 0, 1, true)
+            + ['analytics' => ['route' => 'admin.analytics', 'name' => __('admin.nav.analytics')]]
+            + array_slice($menu, 1, null, true);
+    }
     if (!$isSuperAdmin) {
         unset($menu['distribution']);
     }
@@ -177,7 +185,7 @@
                             </div>
 
                             <div class="mt-4 flex flex-wrap gap-2">
-                                @if($isUpdateCenterEnabled && $isSuperAdmin)
+                                @if($isUpdateCenterEnabled && $showUpdateCenter && $isSuperAdmin)
                                     <a href="{{ $notificationUpdateCenterUrl }}" class="inline-flex items-center rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700">
                                         {{ __('admin.header.notifications.open_update_center') }}
                                     </a>
@@ -236,10 +244,12 @@
                                 <i data-lucide="clipboard-list" class="w-4 h-4 inline mr-2"></i>
                                 {{ __('admin.nav.activity_logs') }}
                             </a>
-                            <a href="{{ route('admin.api-tokens.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                <i data-lucide="key-round" class="w-4 h-4 inline mr-2"></i>
-                                {{ __('admin.nav.api_tokens') }}
-                            </a>
+                            @if ($showApiTokens)
+                                <a href="{{ route('admin.api-tokens.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i data-lucide="key-round" class="w-4 h-4 inline mr-2"></i>
+                                    {{ __('admin.nav.api_tokens') }}
+                                </a>
+                            @endif
                         @endif
                         <div class="border-t border-gray-100"></div>
                         <form method="POST" action="{{ route('admin.logout') }}">

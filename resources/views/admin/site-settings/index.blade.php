@@ -635,7 +635,7 @@
                         <div class="text-xs text-gray-500">{{ __('admin.site_settings.theme.current_help') }}</div>
                     </div>
 
-                    @if ($canManageProtectedWorkflows)
+                    @if ($canManageProtectedWorkflows && config('geoflow.admin_features.theme_replication', false))
                     <div class="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div class="min-w-0">

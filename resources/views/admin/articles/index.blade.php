@@ -70,6 +70,12 @@
             'linkClass' => 'text-purple-700 group-hover:text-purple-800',
         ],
     ];
+    if (!config('geoflow.admin_features.analytics_and_leads', false)) {
+        $contentWorkbenchItems = array_values(array_filter(
+            $contentWorkbenchItems,
+            static fn (array $item): bool => $item['href'] !== route('admin.analytics'),
+        ));
+    }
     $workbenchPriority = collect($contentWorkbenchItems)
         ->sortByDesc(fn ($item) => (int) ($item['count'] ?? 0))
         ->first();

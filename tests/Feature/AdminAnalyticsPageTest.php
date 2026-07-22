@@ -26,6 +26,13 @@ class AdminAnalyticsPageTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['geoflow.admin_features.analytics_and_leads' => true]);
+    }
+
     public function test_analytics_page_renders_after_dashboard_nav_item(): void
     {
         $response = $this->actingAs($this->admin(), 'admin')
