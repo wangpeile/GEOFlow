@@ -100,6 +100,10 @@
                         {{ __('admin.articles.trash.empty') }}
                     </button>
                 @else
+                    <a href="{{ route('admin.content-groups.index') }}" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        <i data-lucide="layers-3" class="w-4 h-4 mr-2"></i>
+                        {{ __('admin.content_groups.entry') }}
+                    </a>
                     <a href="{{ route('admin.articles.create') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
                         <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
                         {{ __('admin.button.create_article') }}

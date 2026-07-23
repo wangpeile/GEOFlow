@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\ArticleController;
 use App\Http\Controllers\Admin\ArticleEditorAssetController;
 use App\Http\Controllers\Admin\AuthorController;
 use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\ContentGroupController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DistributionController;
 use App\Http\Controllers\Admin\EnterpriseKnowledgeController;
@@ -179,6 +180,12 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::post('{articleId}/risk-scan', [ArticleController::class, 'recheckRisk'])->name('risk-scan')->whereNumber('articleId');
             Route::post('{articleId}/editor/images/upload', [ArticleEditorAssetController::class, 'uploadImage'])->name('editor.images.upload')->whereNumber('articleId');
             Route::put('{articleId}', [ArticleController::class, 'update'])->name('update');
+        });
+
+        Route::prefix('content-groups')->name('content-groups.')->group(function () {
+            Route::get('/', [ContentGroupController::class, 'index'])->name('index');
+            Route::post('articles/{article}', [ContentGroupController::class, 'store'])->name('store');
+            Route::get('{contentGroup}', [ContentGroupController::class, 'show'])->name('show');
         });
 
         // 栏目管理（保持 geo_admin/categories 路径语义）
