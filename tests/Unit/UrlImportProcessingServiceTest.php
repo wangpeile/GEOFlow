@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Contracts\Outbound\HostResolver;
 use App\Services\GeoFlow\UrlImportProcessingService;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -81,5 +82,22 @@ class UrlImportProcessingServiceTest extends TestCase
         $result = $this->service->normalizeInputUrl('http://www.example.com');
 
         $this->assertSame('http://www.example.com', $result['url']);
+    }
+
+    public function test_it_turns_dns_lookup_failures_into_a_validation_error(): void
+    {
+        $this->app->instance(HostResolver::class, new class implements HostResolver
+        {
+            public function resolve(string $host): array
+            {
+                throw new \RuntimeException('temporary DNS server failure');
+            }
+        });
+
+        $service = $this->app->make(UrlImportProcessingService::class);
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $service->normalizeInputUrl('https://unavailable.example/path');
     }
 }

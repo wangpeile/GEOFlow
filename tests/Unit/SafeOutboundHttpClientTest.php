@@ -252,12 +252,10 @@ class SafeOutboundHttpClientTest extends TestCase
     #[Test]
     public function the_system_resolver_follows_cnames_and_collects_a_and_aaaa_records(): void
     {
-        $resolver = new SystemHostResolver(static fn (string $host): array => match ($host) {
-            'alias.example' => [['type' => 'CNAME', 'target' => 'edge.example']],
-            'edge.example' => [
-                ['type' => 'A', 'ip' => '93.184.216.34'],
-                ['type' => 'AAAA', 'ipv6' => '2606:2800:220:1:248:1893:25c8:1946'],
-            ],
+        $resolver = new SystemHostResolver(static fn (string $host, int $type): array => match ([$host, $type]) {
+            ['alias.example', DNS_CNAME] => [['type' => 'CNAME', 'target' => 'edge.example']],
+            ['edge.example', DNS_A] => [['type' => 'A', 'ip' => '93.184.216.34']],
+            ['edge.example', DNS_AAAA] => [['type' => 'AAAA', 'ipv6' => '2606:2800:220:1:248:1893:25c8:1946']],
             default => [],
         });
 
@@ -265,6 +263,22 @@ class SafeOutboundHttpClientTest extends TestCase
             ['93.184.216.34', '2606:2800:220:1:248:1893:25c8:1946'],
             $resolver->resolve('alias.example')
         );
+    }
+
+    #[Test]
+    public function the_system_resolver_keeps_valid_a_records_when_aaaa_lookup_fails(): void
+    {
+        $resolver = new SystemHostResolver(static function (string $host, int $type): array {
+            if ($type === DNS_AAAA) {
+                throw new \RuntimeException('temporary DNS server failure');
+            }
+
+            return $type === DNS_A
+                ? [['type' => 'A', 'ip' => '47.94.198.142']]
+                : [];
+        });
+
+        $this->assertSame(['47.94.198.142'], $resolver->resolve('redwhalertc.com'));
     }
 
     #[Test]

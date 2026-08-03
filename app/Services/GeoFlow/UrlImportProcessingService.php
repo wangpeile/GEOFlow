@@ -13,6 +13,7 @@ use App\Models\TitleLibrary;
 use App\Models\UrlImportJob;
 use App\Models\UrlImportJobLog;
 use App\Services\Outbound\OutboundRequestBlockedException;
+use App\Services\Outbound\OutboundRequestFailedException;
 use App\Services\Outbound\SafeOutboundHttpClient;
 use App\Support\GeoFlow\ApiKeyCrypto;
 use App\Support\GeoFlow\OpenAiRuntimeProvider;
@@ -50,7 +51,7 @@ final class UrlImportProcessingService
 
         try {
             $target = $this->safeHttp->resolveTarget($candidate);
-        } catch (OutboundRequestBlockedException) {
+        } catch (OutboundRequestBlockedException|OutboundRequestFailedException) {
             throw new \InvalidArgumentException(__('admin.url_import.error.invalid_url'));
         }
 

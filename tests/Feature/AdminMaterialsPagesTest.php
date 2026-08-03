@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Contracts\Outbound\HostResolver;
 use App\Models\Admin;
 use App\Models\AiModel;
 use App\Models\Image;
@@ -788,6 +789,37 @@ class AdminMaterialsPagesTest extends TestCase
             'status' => 'queued',
             'current_step' => 'queued',
         ]);
+    }
+
+    public function test_url_import_dns_failure_returns_a_form_error_without_creating_a_job(): void
+    {
+        $admin = Admin::query()->create([
+            'username' => 'url_import_dns_failure_admin',
+            'password' => 'secret-123',
+            'email' => 'url-import-dns-failure@example.com',
+            'display_name' => 'Url Import DNS Failure Admin',
+            'role' => 'super_admin',
+            'status' => 'active',
+        ]);
+
+        $this->app->instance(HostResolver::class, new class implements HostResolver
+        {
+            public function resolve(string $host): array
+            {
+                throw new \RuntimeException('temporary DNS server failure');
+            }
+        });
+
+        $this->actingAs($admin, 'admin')
+            ->from(route('admin.url-import'))
+            ->post(route('admin.url-import.store'), [
+                'url' => 'https://unavailable.example/report',
+                'outputs' => ['knowledge'],
+            ])
+            ->assertRedirect(route('admin.url-import'))
+            ->assertSessionHasErrors('url');
+
+        $this->assertDatabaseCount('url_import_jobs', 0);
     }
 
     public function test_url_import_requires_ready_ai_model_before_creating_job(): void

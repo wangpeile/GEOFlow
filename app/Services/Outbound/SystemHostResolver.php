@@ -7,13 +7,13 @@ use Closure;
 
 final class SystemHostResolver implements HostResolver
 {
-    /** @var Closure(string): array<int, array<string, mixed>> */
+    /** @var Closure(string, int): array<int, array<string, mixed>> */
     private readonly Closure $lookup;
 
-    /** @param (Closure(string): array<int, array<string, mixed>>)|null $lookup */
+    /** @param (Closure(string, int): array<int, array<string, mixed>>)|null $lookup */
     public function __construct(?Closure $lookup = null)
     {
-        $this->lookup = $lookup ?? static fn (string $host): array => dns_get_record($host, DNS_A | DNS_AAAA | DNS_CNAME) ?: [];
+        $this->lookup = $lookup ?? static fn (string $host, int $type): array => @dns_get_record($host, $type) ?: [];
     }
 
     public function resolve(string $host): array
@@ -33,7 +33,7 @@ final class SystemHostResolver implements HostResolver
 
         $visited[$host] = true;
         $addresses = [];
-        foreach (($this->lookup)($host) as $record) {
+        foreach ($this->lookupRecords($host) as $record) {
             $type = strtoupper((string) ($record['type'] ?? ''));
             if ($type === 'A' && filter_var($record['ip'] ?? null, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
                 $addresses[] = (string) $record['ip'];
@@ -48,5 +48,25 @@ final class SystemHostResolver implements HostResolver
         }
 
         return array_values(array_unique($addresses));
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function lookupRecords(string $host): array
+    {
+        $records = [];
+
+        foreach ([DNS_A, DNS_AAAA, DNS_CNAME] as $type) {
+            try {
+                $result = ($this->lookup)($host, $type);
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if (is_array($result)) {
+                $records = [...$records, ...$result];
+            }
+        }
+
+        return $records;
     }
 }
