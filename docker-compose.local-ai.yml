@@ -1,0 +1,38 @@
+name: geoflow-local-ai
+
+services:
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: geoflow-ollama
+    environment:
+      OLLAMA_NO_CLOUD: "1"
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ${OLLAMA_DATA_DIR:-./docker-data/prod/ollama}:/root/.ollama
+    networks:
+      - geoflow
+    restart: unless-stopped
+
+  qdrant:
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:latest}
+    container_name: geoflow-qdrant
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
+    ports:
+      - "127.0.0.1:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - geoflow
+    restart: unless-stopped
+
+networks:
+  geoflow:
+    external: true
+    name: ${DOCKER_NETWORK_NAME:-geoflow-prod-net}
+
+volumes:
+  qdrant-data:
+    name: geoflow-qdrant-data
