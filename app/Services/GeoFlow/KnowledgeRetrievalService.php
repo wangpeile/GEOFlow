@@ -161,6 +161,7 @@ class KnowledgeRetrievalService
             $score = ($vectorScore * 0.45) + ($lexicalScore * 0.35) + ($titleScore * 0.12) + ($metadataScore * 0.08);
 
             $scored[] = [
+                'knowledge_chunk_id' => (int) $row->id,
                 'chunk_index' => $chunkIndex,
                 'content' => $content,
                 'chunk_title' => $title,
@@ -368,6 +369,7 @@ class KnowledgeRetrievalService
     private function knowledgeChunkSelectColumns(): array
     {
         return [
+            'id',
             'chunk_index',
             'content',
             'chunk_title',
@@ -482,6 +484,7 @@ class KnowledgeRetrievalService
                 $candidate = $group[0];
                 $candidate['conflict_merged_count'] = 0;
                 $resolved[] = $candidate;
+
                 continue;
             }
 
@@ -490,6 +493,7 @@ class KnowledgeRetrievalService
                     $candidate['conflict_merged_count'] = 0;
                     $resolved[] = $candidate;
                 }
+
                 continue;
             }
 
@@ -779,6 +783,7 @@ class KnowledgeRetrievalService
                 foreach ($this->cjkTokens($token) as $cjkToken) {
                     $frequencies[$cjkToken] = (int) ($frequencies[$cjkToken] ?? 0) + 1;
                 }
+
                 continue;
             }
 

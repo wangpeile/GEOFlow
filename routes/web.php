@@ -17,7 +17,11 @@ use App\Http\Controllers\Admin\ArticleController;
 use App\Http\Controllers\Admin\ArticleEditorAssetController;
 use App\Http\Controllers\Admin\AuthorController;
 use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\ContentArticleController;
+use App\Http\Controllers\Admin\ContentDirectionController;
+use App\Http\Controllers\Admin\ContentEvidenceController;
 use App\Http\Controllers\Admin\ContentGroupController;
+use App\Http\Controllers\Admin\ContentProductionController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DistributionController;
 use App\Http\Controllers\Admin\EnterpriseKnowledgeController;
@@ -186,6 +190,64 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::get('/', [ContentGroupController::class, 'index'])->name('index');
             Route::post('articles/{article}', [ContentGroupController::class, 'store'])->name('store');
             Route::get('{contentGroup}', [ContentGroupController::class, 'show'])->name('show');
+        });
+
+        Route::prefix('content-productions')
+            ->name('content-productions.')
+            ->middleware(['admin.super', 'content.production.enabled'])
+            ->group(function () {
+            Route::get('/', [ContentProductionController::class, 'index'])->name('index');
+            Route::get('create', [ContentProductionController::class, 'create'])->name('create');
+            Route::post('/', [ContentProductionController::class, 'store'])->name('store');
+            Route::get('{contentProduction}', [ContentProductionController::class, 'show'])->name('show');
+            Route::post('{contentProduction}/stages/{stageRun}/retry', [ContentProductionController::class, 'retry'])
+                ->middleware('admin.super')
+                ->name('stages.retry');
+            Route::post('{contentProduction}/evidence/retrieve', [ContentEvidenceController::class, 'retrieve'])
+                ->middleware('admin.super')
+                ->name('evidence.retrieve');
+            Route::post('{contentProduction}/evidence/url-import', [ContentEvidenceController::class, 'attachUrl'])
+                ->middleware('admin.super')
+                ->name('evidence.url-import');
+            Route::post('{contentProduction}/evidence', [ContentEvidenceController::class, 'store'])
+                ->middleware('admin.super')
+                ->name('evidence.store');
+            Route::patch('{contentProduction}/evidence/{contentEvidence}', [ContentEvidenceController::class, 'update'])
+                ->middleware('admin.super')
+                ->name('evidence.update');
+            Route::delete('{contentProduction}/evidence/{contentEvidence}', [ContentEvidenceController::class, 'destroy'])
+                ->middleware('admin.super')
+                ->name('evidence.destroy');
+            Route::post('{contentProduction}/direction/brief/generate', [ContentDirectionController::class, 'generateBrief'])
+                ->middleware('admin.super')->name('direction.brief.generate');
+            Route::post('{contentProduction}/direction/brief', [ContentDirectionController::class, 'saveBrief'])
+                ->middleware('admin.super')->name('direction.brief.save');
+            Route::post('{contentProduction}/direction/titles/generate', [ContentDirectionController::class, 'generateTitles'])
+                ->middleware('admin.super')->name('direction.titles.generate');
+            Route::post('{contentProduction}/direction/titles/select', [ContentDirectionController::class, 'selectTitle'])
+                ->middleware('admin.super')->name('direction.titles.select');
+            Route::post('{contentProduction}/direction/outlines/generate', [ContentDirectionController::class, 'generateOutlines'])
+                ->middleware('admin.super')->name('direction.outlines.generate');
+            Route::post('{contentProduction}/direction/outlines/update', [ContentDirectionController::class, 'updateOutline'])
+                ->middleware('admin.super')->name('direction.outlines.update');
+            Route::post('{contentProduction}/direction/{kind}/confirm', [ContentDirectionController::class, 'confirm'])
+                ->middleware('admin.super')
+                ->whereIn('kind', ['brief', 'titles', 'outlines'])
+                ->name('direction.confirm');
+            Route::post('{contentProduction}/article/sections/initialize', [ContentArticleController::class, 'initialize'])
+                ->middleware('admin.super')->name('article.sections.initialize');
+            Route::post('{contentProduction}/article/sections/generate-all', [ContentArticleController::class, 'generateAll'])
+                ->middleware('admin.super')->name('article.sections.generate-all');
+            Route::post('{contentProduction}/article/sections/{sectionKey}/generate', [ContentArticleController::class, 'generate'])
+                ->middleware('admin.super')->whereUuid('sectionKey')->name('article.sections.generate');
+            Route::put('{contentProduction}/article/sections/{sectionKey}', [ContentArticleController::class, 'save'])
+                ->middleware('admin.super')->whereUuid('sectionKey')->name('article.sections.save');
+            Route::post('{contentProduction}/article/assemble', [ContentArticleController::class, 'assemble'])
+                ->middleware('admin.super')->name('article.assemble');
+            Route::post('{contentProduction}/article/quality/inspect', [ContentArticleController::class, 'inspectQuality'])
+                ->middleware('admin.super')->name('article.quality.inspect');
+            Route::post('{contentProduction}/article/quality/{qualityReport}/repair', [ContentArticleController::class, 'repairQuality'])
+                ->middleware('admin.super')->name('article.quality.repair');
         });
 
         // 栏目管理（保持 geo_admin/categories 路径语义）

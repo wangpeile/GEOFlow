@@ -4,6 +4,7 @@ namespace App\Services\GeoFlow;
 
 use App\Exceptions\ApiException;
 use App\Exceptions\ArticleRiskGateException;
+use App\Exceptions\ContentQualityGateException;
 use App\Models\Article;
 use App\Models\ArticleImage;
 use App\Models\ArticleReview;
@@ -350,6 +351,8 @@ class ArticleGeoFlowService
             );
         } catch (ArticleRiskGateException $exception) {
             throw $this->riskBlockedException(Article::query()->findOrFail($articleId), $exception);
+        } catch (ContentQualityGateException $exception) {
+            throw new ApiException('article_quality_blocked', $exception->getMessage(), 409);
         }
 
         return $this->getArticle($articleId);

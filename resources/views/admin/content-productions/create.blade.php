@@ -1,0 +1,57 @@
+@extends('admin.layouts.app')
+
+@section('content')
+    <div class="mx-auto flex max-w-3xl flex-col gap-6 px-4 sm:px-0">
+        <div>
+            <a href="{{ route('admin.content-productions.index') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-800">← 返回生产项目</a>
+            <h1 class="mt-3 text-2xl font-bold text-gray-900">开始可视化 AI 创作</h1>
+            <p class="mt-1 text-sm leading-6 text-gray-600">先确定主题、语言和目标平台；创建后可按步骤补充资料、确认方向并生成文章。</p>
+        </div>
+
+        <form method="POST" action="{{ route('admin.content-productions.store') }}" class="flex flex-col gap-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            @csrf
+            <input type="hidden" name="idempotency_key" value="{{ old('idempotency_key', (string) \Illuminate\Support\Str::uuid()) }}">
+
+            <label class="flex flex-col gap-2">
+                <span class="text-sm font-semibold text-gray-700">主题或问题 <span class="text-red-500">*</span></span>
+                <textarea name="topic" rows="4" required maxlength="500" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="例如：企业如何选择视频会议系统">{{ old('topic') }}</textarea>
+            </label>
+
+            <label class="flex flex-col gap-2">
+                <span class="text-sm font-semibold text-gray-700">项目名称</span>
+                <input name="name" maxlength="255" value="{{ old('name') }}" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="留空时使用主题作为名称">
+            </label>
+
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <label class="flex flex-col gap-2">
+                    <span class="text-sm font-semibold text-gray-700">创作模式</span>
+                    <input type="hidden" name="mode" value="guided">
+                    <div class="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">可视化向导</div>
+                </label>
+                <label class="flex flex-col gap-2">
+                    <span class="text-sm font-semibold text-gray-700">文章语言</span>
+                    <select name="language" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="zh_CN">中文（简体）</option>
+                    </select>
+                </label>
+            </div>
+
+            <fieldset class="flex flex-col gap-3">
+                <legend class="text-sm font-semibold text-gray-700">目标平台</legend>
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    @foreach (['wordpress' => 'WordPress', 'baijiahao' => '百家号', 'qq' => '腾讯', 'netease' => '网易', 'sohu' => '搜狐', 'toutiao' => '头条号', 'zhihu' => '知乎', 'wechat' => '公众号'] as $value => $label)
+                        <label class="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                            <input type="checkbox" name="target_platforms[]" value="{{ $value }}" @checked(in_array($value, old('target_platforms', ['wordpress']), true)) class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            {{ $label }}
+                        </label>
+                    @endforeach
+                </div>
+            </fieldset>
+
+            <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">
+                <a href="{{ route('admin.content-productions.index') }}" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">取消</a>
+                <button class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">创建项目</button>
+            </div>
+        </form>
+    </div>
+@endsection

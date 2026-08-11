@@ -21,6 +21,7 @@ class SensitiveAdminRouteAuthorizationTest extends TestCase
                 str_starts_with($name, 'admin.distribution.')
                 || str_starts_with($name, 'admin.url-import')
                 || str_starts_with($name, 'admin.site-settings.theme-replications.')
+                || str_starts_with($name, 'admin.content-productions.')
             ))
             ->values();
 

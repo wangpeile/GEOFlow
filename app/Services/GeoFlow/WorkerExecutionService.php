@@ -4,6 +4,7 @@ namespace App\Services\GeoFlow;
 
 use App\Ai\Agents\MarkdownContentWriterAgent;
 use App\Exceptions\ArticleRiskGateException;
+use App\Exceptions\ContentQualityGateException;
 use App\Models\AiModel;
 use App\Models\Article;
 use App\Models\ArticleImage;
@@ -253,7 +254,7 @@ class WorkerExecutionService
                     $reviewStatus !== 'auto_approved',
                     $fallbackWorkflow,
                 );
-            } catch (ArticleRiskGateException) {
+            } catch (ArticleRiskGateException|ContentQualityGateException) {
                 return null;
             }
 

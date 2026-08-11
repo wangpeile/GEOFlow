@@ -146,6 +146,11 @@ class Task extends Model
         return $this->hasMany(TaskRun::class, 'task_id');
     }
 
+    public function contentProductions(): HasMany
+    {
+        return $this->hasMany(ContentProduction::class);
+    }
+
     public function distributionChannels(): BelongsToMany
     {
         return $this->belongsToMany(DistributionChannel::class, 'task_distribution_channels')

@@ -6,6 +6,7 @@
 /uploads
 .env
 .env.prod
+.env.test
 .env.backup
 .env.production
 .phpactor.json

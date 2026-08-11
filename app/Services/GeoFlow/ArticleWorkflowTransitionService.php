@@ -8,7 +8,10 @@ use Illuminate\Support\Facades\DB;
 
 class ArticleWorkflowTransitionService
 {
-    public function __construct(private readonly ArticleRiskGate $articleRiskGate) {}
+    public function __construct(
+        private readonly ArticleRiskGate $articleRiskGate,
+        private readonly PublicationQualityGate $publicationQualityGate,
+    ) {}
 
     /**
      * @param  array{status: string, review_status: string, published_at: mixed}  $workflowState
@@ -42,6 +45,10 @@ class ArticleWorkflowTransitionService
 
             if ($lockedGuard !== null) {
                 $lockedGuard($lockedArticle);
+            }
+
+            if (in_array($workflowState['status'], ['published', 'private'], true)) {
+                $this->publicationQualityGate->check($lockedArticle);
             }
 
             try {

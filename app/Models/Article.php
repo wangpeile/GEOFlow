@@ -99,6 +99,16 @@ class Article extends Model
         return $this->hasOne(ContentGroup::class, 'main_article_id');
     }
 
+    public function contentProductions(): HasMany
+    {
+        return $this->hasMany(ContentProduction::class);
+    }
+
+    public function versions(): HasMany
+    {
+        return $this->hasMany(ArticleVersion::class);
+    }
+
     public function syncedRemoteDistributions(): HasMany
     {
         return $this->hasMany(ArticleDistribution::class, 'article_id')

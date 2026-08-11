@@ -12,6 +12,7 @@ use App\Http\Middleware\AssignApiRequestId;
 use App\Http\Middleware\AuthenticateAdminWeb;
 use App\Http\Middleware\AuthenticateApiToken;
 use App\Http\Middleware\EnsureApiScope;
+use App\Http\Middleware\EnsureContentProductionEnabled;
 use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\LogAdminActivity;
 use App\Http\Middleware\RecordSiteViewLog;
@@ -52,6 +53,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'site.view_log' => RecordSiteViewLog::class,
             // Blade 后台：仅超级管理员
             'admin.super' => EnsureSuperAdmin::class,
+            // 内容生产工作台：功能开关关闭时统一返回 404
+            'content.production.enabled' => EnsureContentProductionEnabled::class,
             // Blade 后台：写操作日志
             'admin.activity' => LogAdminActivity::class,
         ]);

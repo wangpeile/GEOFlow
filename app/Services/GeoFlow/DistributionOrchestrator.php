@@ -21,6 +21,7 @@ class DistributionOrchestrator
         private readonly DistributionPublisherManager $publisherManager,
         private readonly TaskDistributionChannelSelector $channelSelector,
         private readonly ArticleRiskGate $articleRiskGate,
+        private readonly PublicationQualityGate $publicationQualityGate,
         private readonly DistributionChannelOperationLeaseService $channelOperationLeaseService,
     ) {}
 
@@ -550,6 +551,8 @@ class DistributionOrchestrator
             if (! $this->isDistributableSnapshot($lockedArticle)) {
                 throw new \RuntimeException('文章当前状态不允许分发');
             }
+
+            $this->publicationQualityGate->check($lockedArticle);
 
             try {
                 $this->articleRiskGate->check($lockedArticle, $trigger);

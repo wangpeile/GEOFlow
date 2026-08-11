@@ -91,4 +91,14 @@ class Admin extends Authenticatable
     {
         return $this->hasMany(ArticleReview::class, 'admin_id');
     }
+
+    public function contentProductions(): HasMany
+    {
+        return $this->hasMany(ContentProduction::class, 'created_by_admin_id');
+    }
+
+    public function contentEvidences(): HasMany
+    {
+        return $this->hasMany(ContentEvidence::class, 'created_by_admin_id');
+    }
 }
