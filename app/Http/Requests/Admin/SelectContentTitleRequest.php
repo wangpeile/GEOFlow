@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class SelectContentTitleRequest extends FormRequest
 {
@@ -18,8 +19,19 @@ class SelectContentTitleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'candidate_id' => ['nullable', 'uuid', 'required_without:custom_title', 'prohibited_with:custom_title'],
-            'custom_title' => ['nullable', 'string', 'max:180', 'required_without:candidate_id', 'prohibited_with:candidate_id'],
+            'candidate_id' => [
+                'nullable',
+                'uuid',
+                'required_without:custom_title',
+                Rule::prohibitedIf(fn (): bool => $this->filled('custom_title')),
+            ],
+            'custom_title' => [
+                'nullable',
+                'string',
+                'max:180',
+                'required_without:candidate_id',
+                Rule::prohibitedIf(fn (): bool => $this->filled('candidate_id')),
+            ],
         ];
     }
 }
