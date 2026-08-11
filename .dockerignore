@@ -10,6 +10,8 @@ node_modules
 .phpunit.result.cache
 *.log
 bak
+backups
+红鲸_GEOFlow_验证清单.md
 docker-compose*.yml
 docker-data
 storage/app/public/*

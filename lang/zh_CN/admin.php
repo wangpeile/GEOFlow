@@ -6,6 +6,7 @@ return [
         'analytics' => '增长中心',
         'tasks' => '任务管理',
         'distribution' => '分发管理',
+        'content_production' => '内容生产',
         'articles' => '内容管理',
         'materials' => '内容资产',
         'ai_config' => 'AI配置器',

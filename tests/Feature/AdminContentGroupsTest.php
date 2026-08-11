@@ -50,9 +50,10 @@ class AdminContentGroupsTest extends TestCase
         $this->assertSame(8, $contentGroup->variants()->count());
     }
 
-    public function test_admin_can_view_content_group_index_and_all_platforms(): void
+    public function test_super_admin_can_view_content_group_index_and_all_platforms(): void
     {
-        $admin = $this->admin('content_group_viewer');
+        config()->set('geoflow.content_production_pipeline_enabled', true);
+        $admin = $this->admin('content_group_viewer', 'super_admin');
         $article = $this->article('内容组页面测试文章');
 
         $this->actingAs($admin, 'admin')
@@ -74,14 +75,14 @@ class AdminContentGroupsTest extends TestCase
         }
     }
 
-    private function admin(string $username = 'content_group_admin'): Admin
+    private function admin(string $username = 'content_group_admin', string $role = 'admin'): Admin
     {
         return Admin::query()->create([
             'username' => $username,
             'password' => 'secret-123',
             'email' => $username.'@example.com',
             'display_name' => 'Content Group Admin',
-            'role' => 'admin',
+            'role' => $role,
             'status' => 'active',
         ]);
     }

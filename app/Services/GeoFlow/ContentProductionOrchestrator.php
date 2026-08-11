@@ -8,17 +8,22 @@ use App\Enums\ContentStageStatus;
 use App\Models\Admin;
 use App\Models\ContentProduction;
 use App\Models\ContentStageRun;
+use App\Models\WritingRule;
 use App\Support\GeoFlow\ContentProduction\ContentProductionWorkflow;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class ContentProductionOrchestrator
 {
-    public function __construct(private readonly ContentProductionWorkflow $workflow) {}
+    public function __construct(
+        private readonly ContentProductionWorkflow $workflow,
+        private readonly WritingRuleResolver $writingRules,
+    ) {}
 
     /**
-     * @param  array{name: string, topic: string, mode: string, language: string, target_platforms?: list<string>, idempotency_key?: string|null}  $attributes
+     * @param  array{name: string, topic: string, mode: string, language: string, target_platforms?: list<string>, writing_rule_id?: int|null, idempotency_key?: string|null}  $attributes
      */
     public function create(Admin $admin, array $attributes): ContentProduction
     {
@@ -36,7 +41,12 @@ final class ContentProductionOrchestrator
                 }
             }
 
-            $production = ContentProduction::query()->create([
+            $rule = isset($attributes['writing_rule_id'])
+                ? WritingRule::query()->findOrFail($attributes['writing_rule_id'])
+                : null;
+            $ruleSnapshot = $rule ? $this->writingRules->snapshot($rule) : null;
+
+            $productionAttributes = [
                 'uuid' => (string) Str::uuid(),
                 'idempotency_key' => $idempotencyKey,
                 'created_by_admin_id' => $admin->getKey(),
@@ -50,8 +60,19 @@ final class ContentProductionOrchestrator
                 'context' => [
                     'topic' => $attributes['topic'],
                     'language' => $attributes['language'],
+                    'writing_rule' => $ruleSnapshot,
                 ],
-            ]);
+            ];
+
+            // Supports rolling deploys and isolated service tests while the optional
+            // writing-rule snapshot migration is not present yet.
+            if (Schema::hasColumn('content_productions', 'writing_rule_id')) {
+                $productionAttributes['writing_rule_id'] = $ruleSnapshot['writing_rule_id'] ?? null;
+                $productionAttributes['writing_rule_version_id'] = $ruleSnapshot['writing_rule_version_id'] ?? null;
+                $productionAttributes['writing_rule_snapshot'] = $ruleSnapshot;
+            }
+
+            $production = ContentProduction::query()->create($productionAttributes);
 
             foreach ($this->workflow->definitions() as $sequence => $definition) {
                 $production->stageRuns()->create([
@@ -67,7 +88,10 @@ final class ContentProductionOrchestrator
                 'admin_id' => $admin->getKey(),
                 'event' => 'production_created',
                 'to_status' => ContentProductionStatus::Draft->value,
-                'metadata' => ['stage_count' => count($this->workflow->definitions())],
+                'metadata' => [
+                    'stage_count' => count($this->workflow->definitions()),
+                    'writing_rule_version_id' => $ruleSnapshot['writing_rule_version_id'] ?? null,
+                ],
             ]);
 
             return $production->load('stageRuns');

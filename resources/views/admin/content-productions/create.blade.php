@@ -22,6 +22,20 @@
                 <input name="name" maxlength="255" value="{{ old('name') }}" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="留空时使用主题作为名称">
             </label>
 
+            <label class="flex flex-col gap-2">
+                <span class="text-sm font-semibold text-gray-700">写作规则</span>
+                <select name="writing_rule_id" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">本次手动配置</option>
+                    @foreach ($writingRules as $writingRule)
+                        <option value="{{ $writingRule->id }}" @selected((string) old('writing_rule_id') === (string) $writingRule->id)>
+                            {{ $writingRule->name }} · {{ $writingRule->articleType?->name ?: '未分类' }} · v{{ $writingRule->current_version }}
+                        </option>
+                    @endforeach
+                </select>
+                <span class="text-xs text-gray-500">创建时会保存当前规则快照，后续修改规则不会改变本项目。</span>
+                <a href="{{ route('admin.writing-rules.index') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-800">管理写作规则</a>
+            </label>
+
             <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <label class="flex flex-col gap-2">
                     <span class="text-sm font-semibold text-gray-700">创作模式</span>

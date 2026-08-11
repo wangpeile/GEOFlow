@@ -7,6 +7,7 @@ return array_replace_recursive($base, [
         'dashboard' => 'Painel',
         'tasks' => 'Tarefas',
         'articles' => 'Artigos',
+        'content_production' => 'Produção de conteúdo',
         'materials' => 'Ativos de conteúdo',
         'ai_config' => 'Configuração de IA',
         'site_settings' => 'Configurações do Site',

@@ -7,6 +7,7 @@ return [
         'tasks' => 'Tasks',
         'distribution' => 'Distribution',
         'articles' => 'Content Management',
+        'content_production' => 'Content Production',
         'materials' => 'Content Assets',
         'ai_config' => 'AI Configurator',
         'site_settings' => 'Site Settings',

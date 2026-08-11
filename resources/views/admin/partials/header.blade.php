@@ -26,6 +26,7 @@
         'dashboard' => ['route' => 'admin.dashboard', 'name' => __('admin.nav.dashboard')],
         'tasks' => ['route' => 'admin.tasks.index', 'name' => __('admin.nav.tasks')],
         'distribution' => ['route' => 'admin.distribution.index', 'name' => __('admin.nav.distribution')],
+        'content_production' => ['route' => 'admin.content-productions.index', 'name' => __('admin.nav.content_production')],
         'articles' => ['route' => 'admin.articles.index', 'name' => __('admin.nav.articles')],
         'materials' => ['route' => 'admin.materials.index', 'name' => __('admin.nav.materials')],
         'ai_config' => ['route' => 'admin.ai.configurator', 'name' => __('admin.nav.ai_config')],
@@ -37,7 +38,10 @@
             + array_slice($menu, 1, null, true);
     }
     if (!$isSuperAdmin) {
-        unset($menu['distribution']);
+        unset($menu['distribution'], $menu['content_production']);
+    }
+    if (!config('geoflow.content_production_pipeline_enabled', false)) {
+        unset($menu['content_production']);
     }
     if ($isSuperAdmin) {
         $menu['admin_users'] = ['route' => 'admin.admin-users.index', 'name' => __('admin.nav.admin_users')];
@@ -64,9 +68,21 @@
         'admin.distribution.rotate-secret' => 'distribution',
         'admin.articles.create' => 'articles',
         'admin.articles.edit' => 'articles',
-        'admin.content-groups.index' => 'articles',
-        'admin.content-groups.store' => 'articles',
-        'admin.content-groups.show' => 'articles',
+        'admin.content-groups.index' => 'content_production',
+        'admin.content-groups.store' => 'content_production',
+        'admin.content-groups.show' => 'content_production',
+        'admin.content-groups.variants.generate' => 'content_production',
+        'admin.content-groups.variants.regenerate' => 'content_production',
+        'admin.content-productions.index' => 'content_production',
+        'admin.content-productions.create' => 'content_production',
+        'admin.content-productions.show' => 'content_production',
+        'admin.writing-rules.index' => 'content_production',
+        'admin.writing-rules.create' => 'content_production',
+        'admin.writing-rules.show' => 'content_production',
+        'admin.writing-rules.edit' => 'content_production',
+        'admin.article-types.index' => 'content_production',
+        'admin.article-types.create' => 'content_production',
+        'admin.article-types.edit' => 'content_production',
         'admin.categories.index' => 'materials',
         'admin.categories.create' => 'materials',
         'admin.categories.edit' => 'materials',

@@ -22,6 +22,13 @@
 
         @include('admin.content-productions.partials.wizard-progress')
 
+        @if ($production->writing_rule_snapshot)
+            <section class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                <div class="font-semibold">写作规则：{{ data_get($production->writing_rule_snapshot, 'name') }} · v{{ data_get($production->writing_rule_snapshot, 'version') }}</div>
+                <div class="mt-1 text-xs text-blue-700">已保存不可变快照 · {{ data_get($production->writing_rule_snapshot, 'settings_hash') }}</div>
+            </section>
+        @endif
+
         <div id="content-direction" class="scroll-mt-6">
             @include('admin.content-productions.partials.direction')
         </div>

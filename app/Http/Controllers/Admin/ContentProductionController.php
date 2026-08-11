@@ -9,6 +9,7 @@ use App\Models\ContentProduction;
 use App\Models\ContentStageRun;
 use App\Models\KnowledgeBase;
 use App\Models\UrlImportJob;
+use App\Models\WritingRule;
 use App\Services\GeoFlow\ContentProductionOrchestrator;
 use App\Support\AdminWeb;
 use Illuminate\Http\RedirectResponse;
@@ -43,7 +44,15 @@ class ContentProductionController extends Controller
     {
         $this->ensureEnabled();
 
-        return view('admin.content-productions.create', $this->viewData());
+        return view('admin.content-productions.create', $this->viewData([
+            'writingRules' => WritingRule::query()
+                ->select(['id', 'name', 'article_type_id', 'current_version'])
+                ->with('articleType:id,name')
+                ->where('is_active', true)
+                ->orderByDesc('is_preset')
+                ->orderBy('name')
+                ->get(),
+        ]));
     }
 
     public function store(StoreContentProductionRequest $request): RedirectResponse
@@ -79,6 +88,8 @@ class ContentProductionController extends Controller
             'qualityReports.articleVersion:id,content_production_id,version,kind,title',
             'qualityRepairAttempts.createdBy:id,username,display_name',
             'qualityRepairAttempts.repairedArticleVersion:id,content_production_id,version,kind,title',
+            'writingRule:id,name',
+            'writingRuleVersion:id,writing_rule_id,version,settings_hash',
         ]);
         $latestSections = $contentProduction->sectionVersions
             ->groupBy('section_key')

@@ -7,12 +7,16 @@
                 <h1 class="text-2xl font-bold text-gray-900">内容生产工作台</h1>
                 <p class="mt-1 text-sm leading-6 text-gray-600">选择创作方式，或继续处理已有内容项目。</p>
             </div>
-            @if (config('geoflow.content_production_pipeline_enabled', false))
-                <a href="{{ route('admin.content-productions.create') }}" class="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
-                    <i data-lucide="plus" class="mr-2 h-4 w-4"></i>
-                    开始可视化创作
-                </a>
-            @endif
+            <div class="flex flex-wrap gap-2">
+                <a href="{{ route('admin.content-groups.index') }}" class="inline-flex items-center justify-center rounded-md border border-violet-300 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50">多平台改写</a>
+                <a href="{{ route('admin.writing-rules.index') }}" class="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">写作规则</a>
+                @if (config('geoflow.content_production_pipeline_enabled', false))
+                    <a href="{{ route('admin.content-productions.create') }}" class="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+                        <i data-lucide="plus" class="mr-2 h-4 w-4"></i>
+                        开始可视化创作
+                    </a>
+                @endif
+            </div>
         </div>
 
         <section aria-labelledby="creation-mode-heading">
