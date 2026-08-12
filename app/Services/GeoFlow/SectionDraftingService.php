@@ -94,8 +94,7 @@ final class SectionDraftingService
         }
 
         try {
-            $result = $this->generator->generate($production->loadMissing('task.aiModel'), $version);
-            $this->chineseContentGuard->validateField('content', $result['content']);
+            $result = $this->generateValidChineseContent($production, $version);
             $version->forceFill([
                 'status' => ContentSectionStatus::Succeeded,
                 'content' => trim($result['content']),
@@ -118,6 +117,33 @@ final class SectionDraftingService
         ]);
 
         return $version->refresh();
+    }
+
+    /**
+     * @return array{content:string, model:?string, source:string}
+     */
+    private function generateValidChineseContent(
+        ContentProduction $production,
+        ContentSectionVersion $version,
+    ): array {
+        $production->loadMissing('task.aiModel');
+        $lastValidationException = null;
+
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $result = $this->generator->generate($production, $version);
+
+            try {
+                $this->chineseContentGuard->validateField('content', $result['content']);
+
+                return $result;
+            } catch (ValidationException $exception) {
+                $lastValidationException = $exception;
+            }
+        }
+
+        throw $lastValidationException ?? ValidationException::withMessages([
+            'content' => '模型未能生成合格的简体中文内容。',
+        ]);
     }
 
     public function saveManual(

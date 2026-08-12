@@ -30,11 +30,20 @@ final class ChineseContentGuard
             '/\bi cannot\b/i',
             '/\bsystem prompt\b/i',
             '/\buser prompt\b/i',
+            '/\bthe user (?:wants|asked|is asking)\b/i',
+            '/\blet me (?:identify|analy[sz]e|think|write|craft)\b/i',
+            '/\b(?:we|i) need to\b/i',
+            '/\bthis is an? h[1-6] section\b/i',
         ];
         foreach ($instructionPatterns as $pattern) {
             if (preg_match($pattern, $plain) === 1) {
                 throw ValidationException::withMessages([$field => '内容包含无意义的英文模型说明，请重写。']);
             }
+        }
+
+        $withoutUrls = preg_replace('#https?://\S+#iu', '', $plain) ?? $plain;
+        if (preg_match('/(?:\b[A-Za-z][A-Za-z\x{2019}\x{0027}-]*\b[\s,;:()\-]*){8,}/u', $withoutUrls) === 1) {
+            throw ValidationException::withMessages([$field => '内容包含连续的英文说明，请改为简体中文。']);
         }
 
         $hanCount = preg_match_all('/\p{Han}/u', $plain);

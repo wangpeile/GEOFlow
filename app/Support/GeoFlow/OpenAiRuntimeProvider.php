@@ -185,8 +185,12 @@ final class OpenAiRuntimeProvider
     public static function normalizeGeneratedText(string $content): string
     {
         $trimmed = trim($content);
-        if ($trimmed === '' || ! self::looksLikeSseCompletionPayload($trimmed)) {
-            return $trimmed;
+        if ($trimmed === '') {
+            return '';
+        }
+
+        if (! self::looksLikeSseCompletionPayload($trimmed)) {
+            return self::stripReasoningBlocks($trimmed);
         }
 
         $segments = [];
@@ -237,7 +241,9 @@ final class OpenAiRuntimeProvider
             }
         }
 
-        return trim(implode('', array_filter($segments, static fn (string $segment): bool => $segment !== '')));
+        return self::stripReasoningBlocks(
+            implode('', array_filter($segments, static fn (string $segment): bool => $segment !== ''))
+        );
     }
 
     public static function looksLikeSseCompletionPayload(string $content): bool
@@ -304,5 +310,21 @@ final class OpenAiRuntimeProvider
         }
 
         return $text;
+    }
+
+    private static function stripReasoningBlocks(string $content): string
+    {
+        $cleaned = preg_replace(
+            '#<(?:think|thinking|analysis)\b[^>]*>.*?</(?:think|thinking|analysis)>#isu',
+            '',
+            $content,
+        ) ?? $content;
+        $cleaned = preg_replace(
+            '#```(?:think|thinking|analysis)\s*.*?```#isu',
+            '',
+            $cleaned,
+        ) ?? $cleaned;
+
+        return trim($cleaned);
     }
 }

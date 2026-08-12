@@ -48,6 +48,20 @@ class OpenAiRuntimeProviderTest extends TestCase
         $this->assertSame($content, OpenAiRuntimeProvider::normalizeGeneratedText($content));
     }
 
+    public function test_it_strips_model_reasoning_blocks_from_regular_text(): void
+    {
+        $content = "<think>The user wants me to write a Chinese section. Let me analyze it.</think>\n\n这是最终的中文正文。";
+
+        $this->assertSame('这是最终的中文正文。', OpenAiRuntimeProvider::normalizeGeneratedText($content));
+    }
+
+    public function test_it_strips_markdown_reasoning_blocks(): void
+    {
+        $content = "```thinking\nThe user wants a detailed answer.\n```\n\n这是可以保存的正文。";
+
+        $this->assertSame('这是可以保存的正文。', OpenAiRuntimeProvider::normalizeGeneratedText($content));
+    }
+
     public function test_it_extracts_generated_text_from_sse_chunks(): void
     {
         $content = implode("\n", [
@@ -57,6 +71,17 @@ class OpenAiRuntimeProviderTest extends TestCase
         ]);
 
         $this->assertSame('第一段，第二段', OpenAiRuntimeProvider::normalizeGeneratedText($content));
+    }
+
+    public function test_it_strips_reasoning_blocks_after_extracting_sse_chunks(): void
+    {
+        $content = implode("\n", [
+            'data: {"id":"1","object":"chat.completion.chunk","choices":[{"delta":{"content":"<think>Let me analyze the request.</think>"}}]}',
+            'data: {"id":"1","object":"chat.completion.chunk","choices":[{"delta":{"content":"这是最终正文。"}}]}',
+            'data: [DONE]',
+        ]);
+
+        $this->assertSame('这是最终正文。', OpenAiRuntimeProvider::normalizeGeneratedText($content));
     }
 
     public function test_it_drops_empty_usage_only_sse_chunks(): void

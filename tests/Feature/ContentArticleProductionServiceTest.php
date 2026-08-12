@@ -143,6 +143,55 @@ class ContentArticleProductionServiceTest extends TestCase
         $guard->validateField('content', 'As an AI，我将输出一篇文章。');
     }
 
+    public function test_section_generation_retries_once_after_invalid_english_reasoning(): void
+    {
+        [$admin, $production, $nodes] = $this->context();
+        $service = app(SectionDraftingService::class);
+        $service->initialize($admin, $production);
+        $this->generator->queuedContents = [
+            'The user wants me to write this section in Chinese. Let me analyze the evidence first.',
+            $this->sectionContent($nodes[0]['heading']),
+        ];
+
+        $section = $service->generate($admin, $production, $nodes[0]['id']);
+
+        $this->assertSame(ContentSectionStatus::Succeeded, $section->status);
+        $this->assertSame(2, $this->generator->calls);
+        $this->assertSame($this->sectionContent($nodes[0]['heading']), $section->content);
+    }
+
+    public function test_section_generation_stops_after_two_invalid_chinese_outputs(): void
+    {
+        [$admin, $production, $nodes] = $this->context();
+        $service = app(SectionDraftingService::class);
+        $service->initialize($admin, $production);
+        $this->generator->queuedContents = [
+            'The user wants me to write this section in Chinese.',
+            'Let me analyze the evidence before writing the final answer.',
+        ];
+
+        $section = $service->generate($admin, $production, $nodes[0]['id']);
+
+        $this->assertSame(ContentSectionStatus::Failed, $section->status);
+        $this->assertSame(2, $this->generator->calls);
+        $this->assertNull($section->content);
+        $this->assertStringContainsString('英文模型说明', (string) $section->error_message);
+    }
+
+    public function test_section_generation_does_not_retry_provider_failures(): void
+    {
+        [$admin, $production, $nodes] = $this->context();
+        $service = app(SectionDraftingService::class);
+        $service->initialize($admin, $production);
+        $this->generator->failKeys = [$nodes[0]['id']];
+
+        $section = $service->generate($admin, $production, $nodes[0]['id']);
+
+        $this->assertSame(ContentSectionStatus::Failed, $section->status);
+        $this->assertSame(1, $this->generator->calls);
+        $this->assertNull($section->content);
+    }
+
     /**
      * @return array{Admin, ContentProduction, list<array{id:string, heading:string, level:string, evidence_ids:list<int>}>}
      */
@@ -228,15 +277,24 @@ final class FakeContentSectionGenerator implements ContentSectionGenerator
     /** @var list<string> */
     public array $failKeys = [];
 
+    /** @var list<string> */
+    public array $queuedContents = [];
+
+    public int $calls = 0;
+
     public function generate(ContentProduction $production, ContentSectionVersion $section): array
     {
+        $this->calls++;
+
         if (in_array($section->section_key, $this->failKeys, true)) {
             throw new RuntimeException('模拟章节生成失败');
         }
 
         return [
-            'content' => $section->heading.'围绕企业实际需求展开。'
-                .str_repeat('团队应明确目标、核对依据、记录实施结果，并根据真实反馈持续调整方案。', 5),
+            'content' => $this->queuedContents !== []
+                ? array_shift($this->queuedContents)
+                : $section->heading.'围绕企业实际需求展开。'
+                    .str_repeat('团队应明确目标、核对依据、记录实施结果，并根据真实反馈持续调整方案。', 5),
             'model' => 'fake-section-model',
             'source' => 'test',
         ];
