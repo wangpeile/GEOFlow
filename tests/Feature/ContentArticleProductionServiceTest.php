@@ -120,6 +120,64 @@ class ContentArticleProductionServiceTest extends TestCase
         $this->assertNull($first->article->published_at);
     }
 
+    public function test_revised_outline_reconciles_sections_and_preserves_only_unchanged_content(): void
+    {
+        [$admin, $production, $nodes] = $this->context();
+        $drafting = app(SectionDraftingService::class);
+        $drafting->initialize($admin, $production);
+        foreach ($nodes as $node) {
+            $drafting->saveManual($admin, $production, $node['id'], $this->sectionContent($node['heading']));
+        }
+
+        $originalSections = $drafting->latestSections($production)->keyBy('section_key');
+        $currentOutline = ContentDirectionVersion::query()
+            ->where('content_production_id', $production->id)
+            ->where('kind', ContentDirectionKind::Outlines)
+            ->latest('version')
+            ->firstOrFail();
+        $revisedNodes = $nodes;
+        $revisedNodes[1]['heading'] = '如何建立可执行的选型标准';
+        $revisedNodes[2]['position'] = 1;
+        [$revisedNodes[0], $revisedNodes[2]] = [$revisedNodes[2], $revisedNodes[0]];
+        $payload = $currentOutline->payload;
+        $payload['candidates'][0]['nodes'] = $revisedNodes;
+        $revisedOutline = ContentDirectionVersion::query()->create([
+            'content_production_id' => $production->id,
+            'kind' => ContentDirectionKind::Outlines,
+            'version' => 2,
+            'payload' => $payload,
+            'input_hash' => hash('sha256', 'revised-outline'),
+            'source_version_ids' => [$currentOutline->id],
+            'created_by_admin_id' => $admin->id,
+            'confirmed_by_admin_id' => $admin->id,
+            'confirmed_at' => now(),
+        ]);
+
+        $reconciled = $drafting->initialize($admin, $production)->keyBy('section_key');
+        $drafting->initialize($admin, $production);
+
+        $this->assertSame($revisedOutline->id, $reconciled[$nodes[0]['id']]->outline_version_id);
+        $this->assertSame(ContentSectionStatus::Succeeded, $reconciled[$nodes[0]['id']]->status);
+        $this->assertSame($originalSections[$nodes[0]['id']]->content, $reconciled[$nodes[0]['id']]->content);
+        $this->assertSame(ContentSectionStatus::Pending, $reconciled[$nodes[1]['id']]->status);
+        $this->assertNull($reconciled[$nodes[1]['id']]->content);
+        $this->assertSame(ContentSectionStatus::Succeeded, $reconciled[$nodes[2]['id']]->status);
+        $this->assertSame(3, ContentSectionVersion::query()
+            ->where('outline_version_id', $revisedOutline->id)
+            ->count());
+
+        $drafting->saveManual(
+            $admin,
+            $production,
+            $nodes[1]['id'],
+            $this->sectionContent($revisedNodes[1]['heading']),
+        );
+        $assembled = app(ArticleAssemblyService::class)->assemble($admin, $production);
+
+        $this->assertStringContainsString('## '.$revisedNodes[1]['heading'], $assembled->body);
+        $this->assertStringContainsString($originalSections[$nodes[0]['id']]->content, $assembled->body);
+    }
+
     public function test_assembly_requires_explicit_article_ownership_and_guard_rejects_ai_instructions(): void
     {
         [$admin, $production, $nodes] = $this->context(false);

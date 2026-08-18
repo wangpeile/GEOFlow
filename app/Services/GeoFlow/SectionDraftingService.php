@@ -51,6 +51,20 @@ final class SectionDraftingService
                     continue;
                 }
 
+                $previous = ContentSectionVersion::query()
+                    ->where('content_production_id', $production->id)
+                    ->where('section_key', (string) $node['id'])
+                    ->latest('version')
+                    ->first();
+                $evidenceIds = array_values(array_unique(array_map('intval', $node['evidence_ids'] ?? [])));
+                sort($evidenceIds);
+                $previousEvidenceIds = array_values(array_unique(array_map('intval', $previous?->evidence_ids ?? [])));
+                sort($previousEvidenceIds);
+                $canCarryForward = $previous?->status === ContentSectionStatus::Succeeded
+                    && $previous->heading === trim((string) $node['heading'])
+                    && $previous->level === (string) $node['level']
+                    && $previousEvidenceIds === $evidenceIds;
+
                 ContentSectionVersion::query()->create([
                     'content_production_id' => $production->id,
                     'outline_version_id' => $outline->id,
@@ -58,19 +72,28 @@ final class SectionDraftingService
                     'heading' => trim((string) $node['heading']),
                     'level' => (string) $node['level'],
                     'position' => $position + 1,
-                    'version' => 1,
-                    'status' => ContentSectionStatus::Pending,
-                    'evidence_ids' => array_values(array_unique(array_map('intval', $node['evidence_ids'] ?? []))),
+                    'version' => ((int) ($previous?->version ?? 0)) + 1,
+                    'status' => $canCarryForward
+                        ? ContentSectionStatus::Succeeded
+                        : ContentSectionStatus::Pending,
+                    'content' => $canCarryForward ? $previous->content : null,
+                    'evidence_ids' => $evidenceIds,
                     'input_hash' => $this->inputHash($production, $outline, $node),
-                    'prompt_version' => 'section-v1',
-                    'generation_source' => 'manual',
+                    'model' => $canCarryForward ? $previous->model : null,
+                    'prompt_version' => $canCarryForward
+                        ? $previous->prompt_version
+                        : 'section-v1',
+                    'generation_source' => $canCarryForward
+                        ? 'outline_reconciled'
+                        : 'manual',
                     'created_by_admin_id' => $admin->id,
                 ]);
             }
 
-            $this->setStageState($production, ContentStageStatus::WaitingInput);
             $this->audit($production, $admin, 'sections.initialized', ['outline_version_id' => $outline->id]);
         });
+
+        $this->refreshStageState($production);
 
         return $this->latestSections($production);
     }
@@ -201,8 +224,11 @@ final class SectionDraftingService
 
     private function latestSection(ContentProduction $production, string $sectionKey): ContentSectionVersion
     {
+        $outline = $this->confirmedOutline($production);
+
         return ContentSectionVersion::query()
             ->where('content_production_id', $production->id)
+            ->where('outline_version_id', $outline->id)
             ->where('section_key', $sectionKey)
             ->latest('version')
             ->firstOrFail();
