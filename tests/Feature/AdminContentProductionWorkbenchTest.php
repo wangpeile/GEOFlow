@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Admin;
+use App\Models\Author;
+use App\Models\Category;
 use App\Models\ContentProduction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -77,6 +79,32 @@ class AdminContentProductionWorkbenchTest extends TestCase
             ->assertSee('研究与证据中心')
             ->assertSeeText('<img src=x onerror=alert("topic")>')
             ->assertDontSee('<img src=x onerror=alert("topic")>', false);
+    }
+
+    #[Test]
+    public function super_admin_can_add_article_ownership_to_an_existing_project(): void
+    {
+        config()->set('geoflow.content_production_pipeline_enabled', true);
+        $admin = $this->admin('super_admin');
+        $category = Category::query()->create(['name' => '内容生产', 'slug' => 'content-production']);
+        $author = Author::query()->create(['name' => '内容团队']);
+        $production = ContentProduction::factory()->create([
+            'created_by_admin_id' => $admin->id,
+            'context' => ['topic' => '原有主题'],
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->patch(route('admin.content-productions.ownership.update', $production), [
+                'category_id' => $category->id,
+                'author_id' => $author->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('message', '文章分类和作者已保存。');
+
+        $production->refresh();
+        $this->assertSame($category->id, data_get($production->context, 'category_id'));
+        $this->assertSame($author->id, data_get($production->context, 'author_id'));
+        $this->assertSame('原有主题', data_get($production->context, 'topic'));
     }
 
     private function admin(string $role): Admin

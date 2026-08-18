@@ -50,6 +50,27 @@
                 </label>
             </div>
 
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <label class="flex flex-col gap-2">
+                    <span class="text-sm font-semibold text-gray-700">文章分类 <span class="text-red-500">*</span></span>
+                    <select name="category_id" required class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="">请选择分类</option>
+                        @foreach ($categories as $category)
+                            <option value="{{ $category->id }}" @selected((string) old('category_id') === (string) $category->id)>{{ $category->name }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label class="flex flex-col gap-2">
+                    <span class="text-sm font-semibold text-gray-700">文章作者 <span class="text-red-500">*</span></span>
+                    <select name="author_id" required class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="">请选择作者</option>
+                        @foreach ($authors as $author)
+                            <option value="{{ $author->id }}" @selected((string) old('author_id', $authors->count() === 1 ? $authors->first()->id : null) === (string) $author->id)>{{ $author->name }}</option>
+                        @endforeach
+                    </select>
+                </label>
+            </div>
+
             <fieldset class="flex flex-col gap-3">
                 <legend class="text-sm font-semibold text-gray-700">目标平台</legend>
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">

@@ -240,6 +240,8 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                 Route::get('create', [ContentProductionController::class, 'create'])->name('create');
                 Route::post('/', [ContentProductionController::class, 'store'])->name('store');
                 Route::get('{contentProduction}', [ContentProductionController::class, 'show'])->name('show');
+                Route::patch('{contentProduction}/ownership', [ContentProductionController::class, 'updateOwnership'])
+                    ->name('ownership.update');
                 Route::post('{contentProduction}/stages/{stageRun}/retry', [ContentProductionController::class, 'retry'])
                     ->middleware('admin.super')
                     ->name('stages.retry');

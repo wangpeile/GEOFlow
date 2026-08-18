@@ -1,4 +1,27 @@
 <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+    <form method="POST" action="{{ route('admin.content-productions.ownership.update', $production) }}" class="grid grid-cols-1 gap-4 border-b border-gray-200 bg-amber-50 px-6 py-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+        @csrf
+        @method('PATCH')
+        <label class="flex flex-col gap-2">
+            <span class="text-sm font-semibold text-gray-700">文章分类</span>
+            <select name="category_id" required class="rounded-md border-gray-300 bg-white text-sm">
+                <option value="">请选择分类</option>
+                @foreach ($categories as $category)
+                    <option value="{{ $category->id }}" @selected((string) old('category_id', data_get($production->context, 'category_id')) === (string) $category->id)>{{ $category->name }}</option>
+                @endforeach
+            </select>
+        </label>
+        <label class="flex flex-col gap-2">
+            <span class="text-sm font-semibold text-gray-700">文章作者</span>
+            <select name="author_id" required class="rounded-md border-gray-300 bg-white text-sm">
+                <option value="">请选择作者</option>
+                @foreach ($authors as $author)
+                    <option value="{{ $author->id }}" @selected((string) old('author_id', data_get($production->context, 'author_id') ?: ($authors->count() === 1 ? $authors->first()->id : null)) === (string) $author->id)>{{ $author->name }}</option>
+                @endforeach
+            </select>
+        </label>
+        <button class="rounded-md border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100">保存文章归属</button>
+    </form>
     <div class="border-b border-gray-200 px-6 py-4">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>

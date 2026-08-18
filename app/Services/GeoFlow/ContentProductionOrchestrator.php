@@ -70,6 +70,8 @@ final class ContentProductionOrchestrator
                     'topic' => $attributes['topic'],
                     'language' => $attributes['language'],
                     'writing_rule' => $ruleSnapshot,
+                    'category_id' => $attributes['category_id'] ?? null,
+                    'author_id' => $attributes['author_id'] ?? null,
                 ], $attributes['context'] ?? []),
             ];
 

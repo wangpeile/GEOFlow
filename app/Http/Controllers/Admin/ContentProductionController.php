@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\ContentDirectionKind;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreContentProductionRequest;
+use App\Http\Requests\Admin\UpdateContentProductionOwnershipRequest;
+use App\Models\Author;
+use App\Models\Category;
 use App\Models\ContentProduction;
 use App\Models\ContentStageRun;
 use App\Models\KnowledgeBase;
@@ -14,6 +17,7 @@ use App\Services\GeoFlow\ContentProductionOrchestrator;
 use App\Support\AdminWeb;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class ContentProductionController extends Controller
@@ -52,6 +56,8 @@ class ContentProductionController extends Controller
                 ->orderByDesc('is_preset')
                 ->orderBy('name')
                 ->get(),
+            'categories' => Category::query()->select(['id', 'name'])->orderBy('name')->get(),
+            'authors' => Author::query()->select(['id', 'name'])->orderBy('name')->get(),
         ]));
     }
 
@@ -108,6 +114,8 @@ class ContentProductionController extends Controller
             'wizardSteps' => $wizardSteps,
             'resumeStep' => $resumeStep,
             'knowledgeBases' => KnowledgeBase::query()->select('id', 'name')->latest()->get(),
+            'categories' => Category::query()->select(['id', 'name'])->orderBy('name')->get(),
+            'authors' => Author::query()->select(['id', 'name'])->orderBy('name')->get(),
             'urlImportJobs' => UrlImportJob::query()
                 ->select('id', 'page_title', 'normalized_url', 'finished_at')
                 ->where('status', 'completed')
@@ -126,6 +134,25 @@ class ContentProductionController extends Controller
         $this->orchestrator->retry(Auth::guard('admin')->user(), $contentProduction, $stageRun);
 
         return back()->with('message', '失败阶段已加入重试队列。');
+    }
+
+    public function updateOwnership(
+        UpdateContentProductionOwnershipRequest $request,
+        ContentProduction $contentProduction,
+    ): RedirectResponse {
+        $validated = $request->validated();
+
+        DB::transaction(function () use ($contentProduction, $validated): void {
+            $locked = ContentProduction::query()->lockForUpdate()->findOrFail($contentProduction->id);
+            $locked->forceFill([
+                'context' => array_replace($locked->context ?? [], [
+                    'category_id' => (int) $validated['category_id'],
+                    'author_id' => (int) $validated['author_id'],
+                ]),
+            ])->save();
+        });
+
+        return back()->with('message', '文章分类和作者已保存。');
     }
 
     private function ensureEnabled(): void

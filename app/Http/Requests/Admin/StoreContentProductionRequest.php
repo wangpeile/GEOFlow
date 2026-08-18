@@ -30,6 +30,8 @@ class StoreContentProductionRequest extends FormRequest
             'mode' => ['required', Rule::enum(ContentProductionMode::class)],
             'language' => ['required', Rule::in(['zh_CN'])],
             'writing_rule_id' => ['nullable', 'integer', Rule::exists('writing_rules', 'id')->where('is_active', true)],
+            'category_id' => ['required', 'integer', Rule::exists('categories', 'id')],
+            'author_id' => ['required', 'integer', Rule::exists('authors', 'id')],
             'target_platforms' => ['nullable', 'array', 'max:8'],
             'target_platforms.*' => ['string', Rule::in(['wordpress', 'baijiahao', 'qq', 'netease', 'sohu', 'toutiao', 'zhihu', 'wechat'])],
         ];
