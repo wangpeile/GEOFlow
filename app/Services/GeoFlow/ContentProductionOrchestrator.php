@@ -9,6 +9,7 @@ use App\Models\Admin;
 use App\Models\ContentProduction;
 use App\Models\ContentStageRun;
 use App\Models\WritingRule;
+use App\Models\WritingRuleVersion;
 use App\Support\GeoFlow\ContentProduction\ContentProductionWorkflow;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -23,7 +24,7 @@ final class ContentProductionOrchestrator
     ) {}
 
     /**
-     * @param  array{name: string, topic: string, mode: string, language: string, target_platforms?: list<string>, writing_rule_id?: int|null, idempotency_key?: string|null}  $attributes
+     * @param  array{name: string, topic: string, mode: string, language: string, target_platforms?: list<string>, writing_rule_id?: int|null, writing_rule_version_id?: int|null, task_id?: int|null, idempotency_key?: string|null, context?:array<string,mixed>}  $attributes
      */
     public function create(Admin $admin, array $attributes): ContentProduction
     {
@@ -44,12 +45,20 @@ final class ContentProductionOrchestrator
             $rule = isset($attributes['writing_rule_id'])
                 ? WritingRule::query()->findOrFail($attributes['writing_rule_id'])
                 : null;
-            $ruleSnapshot = $rule ? $this->writingRules->snapshot($rule) : null;
+            $specifiedVersion = isset($attributes['writing_rule_version_id'])
+                ? WritingRuleVersion::query()->findOrFail($attributes['writing_rule_version_id'])
+                : null;
+            $ruleSnapshot = $rule
+                ? ($specifiedVersion
+                    ? $this->writingRules->snapshotVersion($rule, $specifiedVersion)
+                    : $this->writingRules->snapshot($rule))
+                : null;
 
             $productionAttributes = [
                 'uuid' => (string) Str::uuid(),
                 'idempotency_key' => $idempotencyKey,
                 'created_by_admin_id' => $admin->getKey(),
+                'task_id' => $attributes['task_id'] ?? null,
                 'name' => $attributes['name'],
                 'topic' => $attributes['topic'],
                 'mode' => ContentProductionMode::from($attributes['mode']),
@@ -57,11 +66,11 @@ final class ContentProductionOrchestrator
                 'current_stage' => $this->workflow->definitions()[0]->stage,
                 'language' => $attributes['language'],
                 'target_platforms' => $attributes['target_platforms'] ?? ['wordpress'],
-                'context' => [
+                'context' => array_replace([
                     'topic' => $attributes['topic'],
                     'language' => $attributes['language'],
                     'writing_rule' => $ruleSnapshot,
-                ],
+                ], $attributes['context'] ?? []),
             ];
 
             // Supports rolling deploys and isolated service tests while the optional

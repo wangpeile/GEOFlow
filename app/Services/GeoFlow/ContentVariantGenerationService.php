@@ -18,6 +18,7 @@ final class ContentVariantGenerationService
         private readonly ContentVariantGenerator $generator,
         private readonly ContentPlatformCatalog $platformCatalog,
         private readonly ContentVariantFactChecker $factChecker,
+        private readonly ContentVariantQualityChecker $qualityChecker,
     ) {}
 
     public function generate(ContentVariant $variant, Admin $admin): ContentVariant
@@ -66,9 +67,18 @@ final class ContentVariantGenerationService
                 (string) $generated['content'],
             ]));
             $factCheck = $this->factChecker->inspect($sourceContent, $generatedContent);
+            $qualityCheck = $this->qualityChecker->inspect(
+                (string) $generated['title'],
+                (string) $generated['content'],
+                $rules,
+                $factCheck,
+                (string) $generated['excerpt'],
+                (array) $generated['tags'],
+                (array) $generated['image_requirements'],
+            );
             $sourceHash = hash('sha256', $sourceContent);
 
-            return DB::transaction(function () use ($variant, $admin, $generated, $rules, $token, $factCheck, $sourceHash): ContentVariant {
+            return DB::transaction(function () use ($variant, $admin, $generated, $rules, $token, $factCheck, $qualityCheck, $sourceHash): ContentVariant {
                 $locked = ContentVariant::query()->whereKey($variant->id)->lockForUpdate()->firstOrFail();
                 if ($locked->generation_token !== $token || $locked->status !== ContentVariant::STATUS_GENERATING) {
                     throw new RuntimeException('本次生成已被更新的请求替代，结果未保存。');
@@ -83,11 +93,13 @@ final class ContentVariantGenerationService
                     'generated_at' => now()->toIso8601String(),
                     'source_content_hash' => $sourceHash,
                     'fact_check' => $factCheck,
+                    'quality_check' => $qualityCheck,
                 ];
 
                 ContentVariantVersion::query()->create([
                     'content_variant_id' => $locked->id,
                     'version' => $nextVersion,
+                    'change_type' => 'generated',
                     'title' => $generated['title'],
                     'excerpt' => $generated['excerpt'],
                     'content' => $generated['content'],
@@ -95,6 +107,7 @@ final class ContentVariantGenerationService
                     'image_requirements' => $generated['image_requirements'],
                     'template_version' => (string) ($rules['template_version'] ?? '1.0'),
                     'generation_meta' => $meta,
+                    'quality_check' => $qualityCheck,
                     'created_by' => $admin->id,
                 ]);
 
@@ -111,6 +124,10 @@ final class ContentVariantGenerationService
                     'generation_meta' => $meta,
                     'source_content_hash' => $sourceHash,
                     'fact_check' => $factCheck,
+                    'quality_check' => $qualityCheck,
+                    'reviewed_by' => null,
+                    'reviewed_at' => null,
+                    'review_note' => null,
                     'generation_token' => null,
                     'generation_started_at' => null,
                     'failure_message' => null,

@@ -10,6 +10,7 @@ class ContentVariantVersion extends Model
     protected $fillable = [
         'content_variant_id',
         'version',
+        'change_type',
         'title',
         'excerpt',
         'content',
@@ -17,6 +18,7 @@ class ContentVariantVersion extends Model
         'image_requirements',
         'template_version',
         'generation_meta',
+        'quality_check',
         'created_by',
     ];
 
@@ -28,6 +30,7 @@ class ContentVariantVersion extends Model
             'tags' => 'array',
             'image_requirements' => 'array',
             'generation_meta' => 'array',
+            'quality_check' => 'array',
             'created_by' => 'integer',
         ];
     }

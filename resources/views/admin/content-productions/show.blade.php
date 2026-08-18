@@ -51,6 +51,19 @@
             </div>
 
             @if (auth('admin')->user()?->canManageProtectedWorkflows() && config('geoflow.content_production_pipeline_enabled', false))
+                <div class="border-b border-gray-200 bg-fuchsia-50 p-6">
+                    <form method="POST" action="{{ route('admin.content-productions.research.store', $production) }}" class="space-y-3 rounded-lg border border-fuchsia-200 bg-white p-4">
+                        @csrf
+                        <div><h3 class="text-sm font-semibold text-gray-900">SERP / 竞品研究</h3><p class="mt-1 text-xs text-gray-500">选择已经完成的 URL 智能采集结果进行对比；不会在这里直接抓取网页。没有来源时自动降级为知识库 / URL 模式。</p></div>
+                        <input name="keyword" value="{{ $production->topic }}" required maxlength="500" class="w-full rounded-md border-gray-300 text-sm" aria-label="研究关键词">
+                        <select name="url_import_job_ids[]" multiple size="4" class="w-full rounded-md border-gray-300 text-sm">
+                            @foreach ($urlImportJobs as $job)
+                                <option value="{{ $job->id }}">{{ $job->page_title ?: $job->normalized_url }}</option>
+                            @endforeach
+                        </select>
+                        <button class="rounded-md bg-fuchsia-600 px-4 py-2 text-sm font-semibold text-white hover:bg-fuchsia-700">生成竞品与内容缺口报告</button>
+                    </form>
+                </div>
                 <div class="grid grid-cols-1 gap-5 border-b border-gray-200 bg-slate-50 p-6 lg:grid-cols-3">
                     <form method="POST" action="{{ route('admin.content-productions.evidence.retrieve', $production) }}" class="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4">
                         @csrf
@@ -87,6 +100,22 @@
                         <input type="hidden" name="usage" value="reference_only">
                         <button class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">保存证据</button>
                     </form>
+                </div>
+            @endif
+
+            @if ($production->researchReports->isNotEmpty())
+                <div class="divide-y divide-fuchsia-100 border-b border-gray-200 bg-fuchsia-50/40">
+                    @foreach ($production->researchReports as $report)
+                        <article class="px-6 py-5">
+                            <div class="flex flex-wrap items-center gap-2"><h3 class="font-semibold text-gray-900">{{ $report->keyword }}</h3><span class="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-fuchsia-700 ring-1 ring-fuchsia-200">{{ $report->status }}</span></div>
+                            <p class="mt-2 text-sm text-gray-700">{{ data_get($report->analysis, 'summary') }}</p>
+                            <div class="mt-3 grid gap-3 md:grid-cols-2">
+                                <div><div class="text-xs font-semibold text-gray-500">内容缺口</div><ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-700">@foreach ((array) data_get($report->analysis, 'content_gaps', []) as $gap)<li>{{ $gap }}</li>@endforeach</ul></div>
+                                <div><div class="text-xs font-semibold text-gray-500">建议</div><ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-700">@foreach ((array) data_get($report->analysis, 'recommendations', []) as $recommendation)<li>{{ $recommendation }}</li>@endforeach</ul></div>
+                            </div>
+                            <p class="mt-3 text-xs text-gray-400">来源 {{ count((array) $report->sources) }} 个 · 采集 {{ $report->collected_at?->format('Y-m-d H:i:s') }} · 报告 #{{ $report->id }}</p>
+                        </article>
+                    @endforeach
                 </div>
             @endif
 

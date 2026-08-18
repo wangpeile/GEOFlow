@@ -10,6 +10,7 @@ use App\Models\Category;
 use App\Models\ContentVariant;
 use App\Models\ContentVariantVersion;
 use App\Services\GeoFlow\ContentGroupService;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use RuntimeException;
 use Tests\TestCase;
@@ -21,6 +22,7 @@ class ContentVariantGenerationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->withoutMiddleware(ValidateCsrfToken::class);
         config()->set('geoflow.content_production_pipeline_enabled', true);
         $this->app->instance(ContentVariantGenerator::class, new FakeContentVariantGenerator);
     }

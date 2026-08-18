@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ContentVariant extends Model
 {
@@ -22,6 +23,10 @@ class ContentVariant extends Model
 
     public const REVIEW_PENDING = 'pending';
 
+    public const REVIEW_APPROVED = 'approved';
+
+    public const REVIEW_REJECTED = 'rejected';
+
     protected $fillable = [
         'content_group_id',
         'source_article_id',
@@ -33,6 +38,9 @@ class ContentVariant extends Model
         'image_requirements',
         'status',
         'review_status',
+        'reviewed_by',
+        'reviewed_at',
+        'review_note',
         'version',
         'template_version',
         'generation_meta',
@@ -40,6 +48,7 @@ class ContentVariant extends Model
         'generation_started_at',
         'source_content_hash',
         'fact_check',
+        'quality_check',
         'failure_message',
         'published_url',
         'published_at',
@@ -63,6 +72,9 @@ class ContentVariant extends Model
             'image_requirements' => 'array',
             'generation_meta' => 'array',
             'fact_check' => 'array',
+            'quality_check' => 'array',
+            'reviewed_by' => 'integer',
+            'reviewed_at' => 'datetime',
             'generation_started_at' => 'datetime',
             'published_at' => 'datetime',
         ];
@@ -81,5 +93,20 @@ class ContentVariant extends Model
     public function versions(): HasMany
     {
         return $this->hasMany(ContentVariantVersion::class)->orderByDesc('version');
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(ContentVariantReview::class)->orderByDesc('id');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'reviewed_by');
+    }
+
+    public function latestPublication(): HasOne
+    {
+        return $this->hasOne(ArticleDistribution::class)->latestOfMany();
     }
 }

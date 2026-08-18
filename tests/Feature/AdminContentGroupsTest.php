@@ -8,12 +8,19 @@ use App\Models\Author;
 use App\Models\Category;
 use App\Models\ContentGroup;
 use App\Models\ContentVariant;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AdminContentGroupsTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutMiddleware(ValidateCsrfToken::class);
+    }
 
     public function test_guest_is_redirected_to_admin_login(): void
     {
@@ -23,7 +30,8 @@ class AdminContentGroupsTest extends TestCase
 
     public function test_admin_can_create_an_idempotent_eight_platform_content_group(): void
     {
-        $admin = $this->admin();
+        config()->set('geoflow.content_production_pipeline_enabled', true);
+        $admin = $this->admin('content_group_admin', 'super_admin');
         $article = $this->article();
         $original = $article->only(['title', 'excerpt', 'content', 'status', 'review_status']);
 

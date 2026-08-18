@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\ApiTokenController;
 use App\Http\Controllers\Admin\ArticleController;
 use App\Http\Controllers\Admin\ArticleEditorAssetController;
+use App\Http\Controllers\Admin\ArticleEditorAssistantController;
 use App\Http\Controllers\Admin\ArticleTypeController;
 use App\Http\Controllers\Admin\AuthorController;
 use App\Http\Controllers\Admin\CategoryController;
@@ -22,7 +23,10 @@ use App\Http\Controllers\Admin\ContentArticleController;
 use App\Http\Controllers\Admin\ContentDirectionController;
 use App\Http\Controllers\Admin\ContentEvidenceController;
 use App\Http\Controllers\Admin\ContentGroupController;
+use App\Http\Controllers\Admin\ContentOperationsController;
 use App\Http\Controllers\Admin\ContentProductionController;
+use App\Http\Controllers\Admin\ContentResearchController;
+use App\Http\Controllers\Admin\ContentVariantController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DistributionController;
 use App\Http\Controllers\Admin\EnterpriseKnowledgeController;
@@ -37,9 +41,11 @@ use App\Http\Controllers\Admin\SecuritySettingsController;
 use App\Http\Controllers\Admin\SiteSettingsController;
 use App\Http\Controllers\Admin\SiteThemeReplicationController;
 use App\Http\Controllers\Admin\SystemUpdateController;
+use App\Http\Controllers\Admin\TaskAutomationController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\Admin\TitleLibraryController;
 use App\Http\Controllers\Admin\UrlImportController;
+use App\Http\Controllers\Admin\WordPressContentPublicationController;
 use App\Http\Controllers\Admin\WritingRuleController;
 use App\Http\Controllers\Site\ArchiveController;
 use App\Http\Controllers\Site\ArticleController as SiteArticleController;
@@ -185,18 +191,27 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::get('{articleId}/edit', [ArticleController::class, 'edit'])->name('edit');
             Route::post('{articleId}/risk-scan', [ArticleController::class, 'recheckRisk'])->name('risk-scan')->whereNumber('articleId');
             Route::post('{articleId}/editor/images/upload', [ArticleEditorAssetController::class, 'uploadImage'])->name('editor.images.upload')->whereNumber('articleId');
+            Route::post('{articleId}/editor/assist', ArticleEditorAssistantController::class)
+                ->middleware(['admin.super', 'content.production.enabled', 'throttle:admin-sensitive'])
+                ->name('editor.assist')->whereNumber('articleId');
             Route::put('{articleId}', [ArticleController::class, 'update'])->name('update');
         });
 
-        Route::prefix('content-groups')->name('content-groups.')->group(function () {
-            Route::get('/', [ContentGroupController::class, 'index'])->name('index');
-            Route::post('articles/{article}', [ContentGroupController::class, 'store'])->name('store');
-            Route::middleware(['admin.super', 'content.production.enabled'])->group(function () {
+        Route::prefix('content-groups')->name('content-groups.')
+            ->middleware(['admin.super', 'content.production.enabled'])
+            ->group(function () {
+                Route::get('/', [ContentGroupController::class, 'index'])->name('index');
+                Route::post('articles/{article}', [ContentGroupController::class, 'store'])->name('store');
                 Route::get('{contentGroup}', [ContentGroupController::class, 'show'])->name('show');
                 Route::post('{contentGroup}/variants/generate', [ContentGroupController::class, 'generate'])->name('variants.generate');
+                Route::post('{contentGroup}/variants/export', [ContentVariantController::class, 'export'])->name('variants.export');
+                Route::get('{contentGroup}/variants/{contentVariant}/edit', [ContentVariantController::class, 'edit'])->name('variants.edit');
+                Route::put('{contentGroup}/variants/{contentVariant}', [ContentVariantController::class, 'update'])->name('variants.update');
+                Route::post('{contentGroup}/variants/{contentVariant}/review', [ContentVariantController::class, 'review'])->name('variants.review');
                 Route::post('{contentGroup}/variants/{contentVariant}/regenerate', [ContentGroupController::class, 'regenerate'])->name('variants.regenerate');
+                Route::post('{contentGroup}/variants/{contentVariant}/wordpress-publications', [WordPressContentPublicationController::class, 'store'])->name('variants.wordpress.publish');
+                Route::post('{contentGroup}/variants/{contentVariant}/wordpress-publications/{articleDistribution}/retry', [WordPressContentPublicationController::class, 'retry'])->name('variants.wordpress.retry');
             });
-        });
 
         Route::middleware(['admin.super', 'content.production.enabled'])->group(function () {
             Route::prefix('writing-rules')->name('writing-rules.')->group(function () {
@@ -237,6 +252,9 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                 Route::post('{contentProduction}/evidence', [ContentEvidenceController::class, 'store'])
                     ->middleware('admin.super')
                     ->name('evidence.store');
+                Route::post('{contentProduction}/research', [ContentResearchController::class, 'store'])
+                    ->middleware('throttle:admin-sensitive')
+                    ->name('research.store');
                 Route::patch('{contentProduction}/evidence/{contentEvidence}', [ContentEvidenceController::class, 'update'])
                     ->middleware('admin.super')
                     ->name('evidence.update');
@@ -273,6 +291,27 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                     ->middleware('admin.super')->name('article.quality.inspect');
                 Route::post('{contentProduction}/article/quality/{qualityReport}/repair', [ContentArticleController::class, 'repairQuality'])
                     ->middleware('admin.super')->name('article.quality.repair');
+            });
+
+        Route::prefix('content-operations')->name('content-operations.')
+            ->middleware(['admin.super', 'content.production.enabled'])
+            ->group(function (): void {
+                Route::get('/', [ContentOperationsController::class, 'index'])->name('index');
+                Route::get('metrics.json', [ContentOperationsController::class, 'json'])->name('json');
+            });
+
+        Route::prefix('content-automations')
+            ->name('content-automations.')
+            ->middleware(['admin.super', 'content.production.enabled'])
+            ->group(function () {
+                Route::get('/', [TaskAutomationController::class, 'index'])->name('index');
+                Route::get('{task}/edit', [TaskAutomationController::class, 'edit'])->name('edit');
+                Route::put('{task}', [TaskAutomationController::class, 'update'])->name('update');
+                Route::post('{task}/pause', [TaskAutomationController::class, 'pause'])->name('pause');
+                Route::post('{task}/resume', [TaskAutomationController::class, 'resume'])->name('resume');
+                Route::post('{task}/run-now', [TaskAutomationController::class, 'runNow'])->name('run-now');
+                Route::post('{task}/schedules/{taskSchedule}/retry', [TaskAutomationController::class, 'retry'])->name('retry');
+                Route::post('{task}/fallback', [TaskAutomationController::class, 'fallback'])->name('fallback');
             });
 
         // 栏目管理（保持 geo_admin/categories 路径语义）

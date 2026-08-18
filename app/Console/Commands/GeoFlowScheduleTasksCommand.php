@@ -2,11 +2,13 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\TaskPipelineMode;
 use App\Models\Task;
 use App\Models\TaskRun;
 use App\Services\GeoFlow\JobQueueService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * GeoFlow 任务调度命令（对齐 bak/bin/cron.php 的入队判定）。
@@ -42,6 +44,9 @@ class GeoFlowScheduleTasksCommand extends Command
         $tasks = Task::query()
             ->select(['id', 'name', 'publish_interval', 'draft_limit', 'article_limit', 'created_count', 'next_run_at', 'next_publish_at', 'schedule_enabled'])
             ->where('status', 'active')
+            ->where(function ($query): void {
+                $query->whereNull('pipeline_mode')->orWhere('pipeline_mode', TaskPipelineMode::Legacy->value);
+            })
             ->orderBy('updated_at')
             ->orderBy('id')
             ->get();
@@ -63,7 +68,7 @@ class GeoFlowScheduleTasksCommand extends Command
 
         $articleStats = empty($taskIds)
             ? collect()
-            : \Illuminate\Support\Facades\DB::table('articles')
+            : DB::table('articles')
                 ->selectRaw("
                     task_id,
                     SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS draft_articles,

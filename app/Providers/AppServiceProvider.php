@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\GeoFlow\ContentEditorAssistant;
 use App\Contracts\GeoFlow\ContentSectionGenerator;
 use App\Contracts\GeoFlow\ContentVariantGenerator;
 use App\Contracts\Outbound\HostResolver;
@@ -12,6 +13,7 @@ use App\Services\Admin\AdminWelcomeModalService;
 use App\Services\GeoFlow\ArticleGeoFlowService;
 use App\Services\GeoFlow\HorizonMetricsAdapter;
 use App\Services\GeoFlow\JobQueueService;
+use App\Services\GeoFlow\LaravelAiContentEditorAssistant;
 use App\Services\GeoFlow\LaravelAiContentSectionGenerator;
 use App\Services\GeoFlow\LaravelAiContentVariantGenerator;
 use App\Services\GeoFlow\TaskLifecycleService;
@@ -44,6 +46,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(HostResolver::class, SystemHostResolver::class);
         $this->app->bind(ContentSectionGenerator::class, LaravelAiContentSectionGenerator::class);
         $this->app->bind(ContentVariantGenerator::class, LaravelAiContentVariantGenerator::class);
+        $this->app->bind(ContentEditorAssistant::class, LaravelAiContentEditorAssistant::class);
         $this->app->singleton(FinalOutboundSecurityPolicy::class);
         $this->app->bind(OutboundTransport::class, function () use ($fixedContextCapability): LaravelPinnedOutboundTransport {
             return new LaravelPinnedOutboundTransport($fixedContextCapability);

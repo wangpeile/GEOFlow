@@ -9,6 +9,9 @@
         ? \App\Support\AdminWeb::routePath('admin.articles.editor.images.upload', ['articleId' => (int) $articleId])
         : '';
     $articleWechatHtmlUrl = \App\Support\AdminWeb::routePath('admin.articles.editor.wechat-html');
+    $articleAssistUrl = $isEdit
+        ? \App\Support\AdminWeb::routePath('admin.articles.editor.assist', ['articleId' => (int) $articleId])
+        : '';
     $vditorLocaleMap = [
         'zh_CN' => 'zh_CN',
         'en' => 'en_US',
@@ -28,6 +31,15 @@
         ['key' => 'quote', 'icon' => 'quote', 'label' => __('admin.article_editor.quick_actions.quote')],
         ['key' => 'list', 'icon' => 'list', 'label' => __('admin.article_editor.quick_actions.list')],
         ['key' => 'divider', 'icon' => 'minus', 'label' => __('admin.article_editor.quick_actions.divider')],
+    ];
+    $editorAssistActions = [
+        ['key' => 'expand', 'label' => '扩写'],
+        ['key' => 'rewrite', 'label' => '改写'],
+        ['key' => 'title', 'label' => '标题'],
+        ['key' => 'description', 'label' => '描述'],
+        ['key' => 'paragraph', 'label' => '段落'],
+        ['key' => 'faq', 'label' => 'FAQ'],
+        ['key' => 'outline', 'label' => '大纲'],
     ];
     $formData = [
         'title' => old('title', (string) ($articleForm['title'] ?? '')),
@@ -247,12 +259,22 @@
                                 @endforeach
                                 <span class="ml-auto text-xs text-gray-500">{{ __('admin.article_editor.message.context_tip') }}</span>
                             </div>
+                            @if ($isEdit && auth('admin')->user()?->canManageProtectedWorkflows() && config('geoflow.content_production_pipeline_enabled', false))
+                                <div class="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-fuchsia-200 bg-fuchsia-50 px-3 py-2 text-sm">
+                                    <span class="mr-1 text-xs font-semibold text-fuchsia-700">AI 选区助手</span>
+                                    @foreach ($editorAssistActions as $assistAction)
+                                        <button type="button" data-editor-assist="{{ $assistAction['key'] }}" class="rounded-md border border-fuchsia-200 bg-white px-3 py-1.5 text-xs font-medium text-fuchsia-700 hover:bg-fuchsia-100">{{ $assistAction['label'] }}</button>
+                                    @endforeach
+                                    <span class="ml-auto text-xs text-fuchsia-600">只替换当前选中文字，不会自动保存整篇文章</span>
+                                </div>
+                            @endif
                             <div
                                 id="content-editor"
                                 class="article-markdown-editor"
                                 data-upload-url="{{ $articleImageUploadUrl }}"
                                 data-upload-enabled="{{ $isEdit ? '1' : '0' }}"
                                 data-wechat-html-url="{{ $articleWechatHtmlUrl }}"
+                                data-assist-url="{{ $articleAssistUrl }}"
                             ></div>
                             <input id="article-editor-quick-image-input" type="file" accept="image/*" class="hidden">
                             <div id="article-editor-context-menu" class="article-editor-context-menu" hidden>
@@ -667,6 +689,7 @@
             const uploadUrl = editorNode?.dataset.uploadUrl || '';
             const uploadEnabled = editorNode?.dataset.uploadEnabled === '1' && uploadUrl !== '';
             const wechatHtmlUrl = editorNode?.dataset.wechatHtmlUrl || '';
+            const assistUrl = editorNode?.dataset.assistUrl || '';
             const cropperScriptUrl = @json(asset('vendor/cropperjs/cropper.min.js'));
             const modal = document.getElementById('article-image-modal');
             const cropTarget = document.getElementById('article-image-crop-target');
@@ -1113,6 +1136,58 @@
                 }
             }
 
+            async function runEditorAssist(action, button) {
+                saveEditorRange();
+                if (!assistUrl || !savedEditorRange || savedEditorRange.collapsed) {
+                    showEditorTip('请先在正文中选择要处理的文字。');
+                    return;
+                }
+
+                const range = savedEditorRange.cloneRange();
+                const selectionSnapshot = range.toString();
+                if (!selectionSnapshot.trim()) {
+                    showEditorTip('请选择有效文字后再使用 AI 助手。');
+                    return;
+                }
+
+                button.disabled = true;
+                button.textContent = '处理中…';
+                try {
+                    const response = await fetch(assistUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({ action: action, selection: selectionSnapshot }),
+                    });
+                    const payload = await response.json().catch(function () { return {}; });
+                    if (!response.ok) {
+                        throw new Error(payload.message || Object.values(payload.errors || {})[0]?.[0] || 'AI 编辑辅助失败。');
+                    }
+                    if (!document.contains(range.startContainer) || range.toString() !== selectionSnapshot) {
+                        throw new Error('正文选区已经变化，为避免覆盖新内容，本次结果未应用。');
+                    }
+
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    if (!document.execCommand('insertText', false, payload.data?.text || '')) {
+                        range.deleteContents();
+                        range.insertNode(document.createTextNode(payload.data?.text || ''));
+                    }
+                    textarea.value = editor.getValue();
+                    showEditorTip('选区已替换，请确认后保存文章。');
+                } catch (error) {
+                    showEditorTip(error.message || 'AI 编辑辅助失败。');
+                } finally {
+                    button.disabled = false;
+                    button.textContent = button.dataset.originalLabel || button.textContent;
+                }
+            }
+
             async function uploadImageFile(file) {
                 if (!file) {
                     setStatus(messages.imageRequired, 'error');
@@ -1236,6 +1311,12 @@
                     saveEditorRange();
                     runEditorAction(node.dataset.editorAction || '');
                 });
+            });
+
+            document.querySelectorAll('[data-editor-assist]').forEach(function (node) {
+                node.dataset.originalLabel = node.textContent;
+                node.addEventListener('mousedown', function (event) { event.preventDefault(); });
+                node.addEventListener('click', function () { runEditorAssist(node.dataset.editorAssist || '', node); });
             });
 
             copyMarkdownButton?.addEventListener('click', copyArticleMarkdown);

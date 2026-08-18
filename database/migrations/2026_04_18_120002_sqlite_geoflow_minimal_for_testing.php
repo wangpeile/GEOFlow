@@ -235,6 +235,15 @@ return new class extends Migration
             $table->softDeletes();
         });
 
+        Schema::create('task_schedules', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('task_id')->constrained('tasks')->cascadeOnDelete();
+            $table->timestamp('next_run_time');
+            $table->string('status', 20)->default('pending');
+            $table->text('error_message')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('task_runs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('task_id')->constrained('tasks')->cascadeOnDelete();
@@ -256,6 +265,7 @@ return new class extends Migration
         }
 
         Schema::dropIfExists('task_runs');
+        Schema::dropIfExists('task_schedules');
         Schema::dropIfExists('articles');
         Schema::dropIfExists('tasks');
         Schema::dropIfExists('images');

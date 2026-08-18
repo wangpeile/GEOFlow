@@ -191,6 +191,60 @@ class WordPressRestPublisherTest extends TestCase
         }
     }
 
+    public function test_retry_recovers_existing_post_by_slug_before_updating(): void
+    {
+        Http::fake(function ($request) {
+            if ($request->method() === 'GET') {
+                return Http::response([['id' => 321, 'slug' => 'hello-world']]);
+            }
+
+            return Http::response([
+                'id' => 321,
+                'link' => 'https://wp.example.com/hello-world/',
+            ]);
+        });
+
+        [, $distribution] = $this->makeDistribution(['attempt_count' => 2]);
+
+        $result = app(WordPressRestPublisher::class)->publish($distribution, [
+            'article' => [
+                'title' => 'Hello World',
+                'slug' => 'hello-world',
+                'excerpt' => 'Short summary',
+                'content_html' => '<p>Hello</p>',
+            ],
+            'assets' => ['images' => []],
+        ]);
+
+        $this->assertSame('321', $result['remote_id']);
+        $this->assertSame('321', $distribution->fresh()->remote_id);
+        Http::assertSent(fn ($request): bool => $request->method() === 'GET'
+            && str_starts_with($request->url(), 'https://wp.example.com/wp-json/wp/v2/posts?')
+            && $request->data()['slug'] === 'hello-world');
+        Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+            && $request->url() === 'https://wp.example.com/wp-json/wp/v2/posts/321');
+        Http::assertNotSent(fn ($request): bool => $request->method() === 'POST'
+            && $request->url() === 'https://wp.example.com/wp-json/wp/v2/posts');
+    }
+
+    public function test_it_rejects_malformed_success_response_without_post_id(): void
+    {
+        Http::fake([
+            'https://wp.example.com/wp-json/wp/v2/posts' => Http::response([
+                'link' => 'https://wp.example.com/hello-world/',
+            ], 201),
+        ]);
+        [, $distribution] = $this->makeDistribution();
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('缺少有效文章 ID');
+
+        app(WordPressRestPublisher::class)->publish($distribution, [
+            'article' => ['title' => 'Hello World', 'slug' => 'hello-world'],
+            'assets' => ['images' => []],
+        ]);
+    }
+
     /**
      * @param  array<string,mixed>  $distributionOverrides
      * @return array{0:DistributionChannel,1:ArticleDistribution}

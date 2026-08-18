@@ -45,6 +45,12 @@ class WordPressRestPublisher implements DistributionPublisherInterface
     {
         $distribution->loadMissing('channel');
         $channel = $this->channel($distribution);
+        $existingPostId = $this->recoverPostIdForRetry($distribution, $channel, $payload);
+        if ($existingPostId !== null) {
+            $distribution->forceFill(['remote_id' => (string) $existingPostId])->save();
+
+            return $this->update($distribution, $payload);
+        }
         $response = $this->requestFactory->request($channel)
             ->post($channel->wordpressRestBaseUrl().'/wp/v2/posts', $this->postPayload($channel, $payload));
         $this->throwIfFailed($response, 'WordPress 文章发布');
@@ -119,6 +125,7 @@ class WordPressRestPublisher implements DistributionPublisherInterface
     private function postPayload(DistributionChannel $channel, array $payload): array
     {
         $article = is_array($payload['article'] ?? null) ? $payload['article'] : [];
+        $publication = is_array($payload['publication'] ?? null) ? $payload['publication'] : [];
         $config = $channel->resolvedChannelConfig();
         $contentHtml = (string) ($article['content_html'] ?? '');
 
@@ -129,10 +136,13 @@ class WordPressRestPublisher implements DistributionPublisherInterface
         $postPayload = [
             'title' => (string) ($article['title'] ?? ''),
             'slug' => (string) ($article['slug'] ?? ''),
-            'status' => (string) $config['wordpress_post_status'],
+            'status' => (string) ($publication['wordpress_status'] ?? $config['wordpress_post_status']),
             'content' => $contentHtml,
             'excerpt' => (string) ($article['excerpt'] ?? ''),
         ];
+        if ($postPayload['status'] === 'future' && filled($publication['scheduled_for'] ?? null)) {
+            $postPayload['date'] = (string) $publication['scheduled_for'];
+        }
 
         $categoryIds = $this->taxonomySyncService->categoryIds($channel, $payload);
         if ($categoryIds !== []) {
@@ -145,6 +155,31 @@ class WordPressRestPublisher implements DistributionPublisherInterface
         }
 
         return $postPayload;
+    }
+
+    /** @param array<string,mixed> $payload */
+    private function recoverPostIdForRetry(ArticleDistribution $distribution, DistributionChannel $channel, array $payload): ?int
+    {
+        if ($distribution->wordpressPostId() || $distribution->attempt_count < 2) {
+            return null;
+        }
+        $article = is_array($payload['article'] ?? null) ? $payload['article'] : [];
+        $slug = trim((string) ($article['slug'] ?? ''));
+        if ($slug === '') {
+            throw new RuntimeException('WordPress 重试缺少稳定 slug，已阻止重复创建文章。');
+        }
+        $response = $this->requestFactory->request($channel)
+            ->get($channel->wordpressRestBaseUrl().'/wp/v2/posts', [
+                'slug' => $slug,
+                'context' => 'edit',
+                'status' => 'any',
+                'per_page' => 1,
+            ]);
+        $this->throwIfFailed($response, 'WordPress 重试身份确认');
+        $posts = $response->json();
+        $postId = is_array($posts) && isset($posts[0]['id']) ? (int) $posts[0]['id'] : 0;
+
+        return $postId > 0 ? $postId : null;
     }
 
     private function channel(ArticleDistribution $distribution): DistributionChannel
@@ -176,9 +211,12 @@ class WordPressRestPublisher implements DistributionPublisherInterface
         }
 
         $postId = (int) ($json['id'] ?? 0);
+        if ($postId <= 0) {
+            throw new RuntimeException('WordPress 返回结果缺少有效文章 ID。');
+        }
 
         return [
-            'remote_id' => $postId > 0 ? (string) $postId : '',
+            'remote_id' => (string) $postId,
             'remote_url' => (string) ($json['link'] ?? ''),
             'remote_meta' => [
                 'wordpress_post_id' => $postId,

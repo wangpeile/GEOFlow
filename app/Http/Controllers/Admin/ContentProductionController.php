@@ -88,6 +88,7 @@ class ContentProductionController extends Controller
             'qualityReports.articleVersion:id,content_production_id,version,kind,title',
             'qualityRepairAttempts.createdBy:id,username,display_name',
             'qualityRepairAttempts.repairedArticleVersion:id,content_production_id,version,kind,title',
+            'researchReports.createdBy:id,username,display_name',
             'writingRule:id,name',
             'writingRuleVersion:id,writing_rule_id,version,settings_hash',
         ]);
@@ -148,15 +149,15 @@ class ContentProductionController extends Controller
             [
                 'name' => '批量自动创作',
                 'description' => '复用写作规则，按关键词或选题批量排队生成。',
-                'status' => 'coming',
-                'prerequisite' => '将在自动模式与每日任务迭代开放',
+                'status' => 'available',
+                'route' => route('admin.content-automations.index'),
                 'icon' => 'layers-3',
             ],
             [
                 'name' => '根据 SERP 创作',
                 'description' => '分析搜索结果、竞争内容和内容缺口后再进入创作。',
-                'status' => 'coming',
-                'prerequisite' => '将在 SERP 与运营增强迭代开放',
+                'status' => 'available',
+                'route' => route('admin.content-productions.create', ['mode' => 'serp']),
                 'icon' => 'search-check',
             ],
             [

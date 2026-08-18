@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TaskPipelineMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -10,6 +11,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Task extends Model
 {
     protected $table = 'tasks';
+
+    protected $attributes = [
+        'pipeline_mode' => 'legacy',
+        'automation_timezone' => 'Asia/Shanghai',
+        'daily_production_limit' => 1,
+        'max_production_concurrency' => 1,
+        'production_failure_policy' => 'continue',
+        'production_output_policy' => 'wordpress_draft',
+        'auto_publish_enabled' => false,
+    ];
 
     protected $fillable = [
         'name',
@@ -47,6 +58,18 @@ class Task extends Model
         'last_error_message',
         'schedule_enabled',
         'max_retry_count',
+        'created_by_admin_id',
+        'pipeline_mode',
+        'writing_rule_id',
+        'writing_rule_version_id',
+        'automation_timezone',
+        'daily_production_limit',
+        'max_production_concurrency',
+        'production_failure_policy',
+        'production_output_policy',
+        'auto_publish_enabled',
+        'daily_token_budget',
+        'automation_settings',
     ];
 
     protected function casts(): array
@@ -79,6 +102,15 @@ class Task extends Model
             'last_error_at' => 'datetime',
             'schedule_enabled' => 'integer',
             'max_retry_count' => 'integer',
+            'created_by_admin_id' => 'integer',
+            'pipeline_mode' => TaskPipelineMode::class,
+            'writing_rule_id' => 'integer',
+            'writing_rule_version_id' => 'integer',
+            'daily_production_limit' => 'integer',
+            'max_production_concurrency' => 'integer',
+            'auto_publish_enabled' => 'boolean',
+            'daily_token_budget' => 'integer',
+            'automation_settings' => 'array',
         ];
     }
 
@@ -149,6 +181,26 @@ class Task extends Model
     public function contentProductions(): HasMany
     {
         return $this->hasMany(ContentProduction::class);
+    }
+
+    public function createdByAdmin(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'created_by_admin_id');
+    }
+
+    public function writingRule(): BelongsTo
+    {
+        return $this->belongsTo(WritingRule::class);
+    }
+
+    public function writingRuleVersion(): BelongsTo
+    {
+        return $this->belongsTo(WritingRuleVersion::class);
+    }
+
+    public function automationRuns(): HasMany
+    {
+        return $this->hasMany(ContentAutomationRun::class);
     }
 
     public function distributionChannels(): BelongsToMany

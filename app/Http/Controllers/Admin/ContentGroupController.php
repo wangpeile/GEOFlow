@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\GenerateContentVariantsRequest;
 use App\Models\Article;
 use App\Models\ContentGroup;
 use App\Models\ContentVariant;
-use App\Http\Requests\Admin\GenerateContentVariantsRequest;
+use App\Models\DistributionChannel;
 use App\Services\GeoFlow\ContentGroupService;
 use App\Services\GeoFlow\ContentVariantGenerationService;
+use App\Services\GeoFlow\ContentWordPressPublicationService;
 use App\Support\AdminWeb;
 use App\Support\GeoFlow\ContentPlatformCatalog;
 use Illuminate\Http\RedirectResponse;
@@ -21,6 +23,7 @@ class ContentGroupController extends Controller
         private readonly ContentGroupService $contentGroupService,
         private readonly ContentVariantGenerationService $variantGenerationService,
         private readonly ContentPlatformCatalog $platformCatalog,
+        private readonly ContentWordPressPublicationService $wordPressPublicationService,
     ) {}
 
     public function index(): View
@@ -65,18 +68,33 @@ class ContentGroupController extends Controller
     public function show(ContentGroup $contentGroup): View
     {
         $contentGroup->load([
-            'mainArticle:id,title,status,review_status,updated_at',
+            'mainArticle:id,title,slug,excerpt,content,keywords,category_id,status,review_status,updated_at',
             'task:id,name',
             'variants' => fn ($query) => $query->select([
                 'id', 'content_group_id', 'source_article_id', 'platform', 'title', 'excerpt', 'content',
                 'tags', 'image_requirements', 'status', 'review_status', 'version', 'template_version',
                 'generation_meta', 'source_content_hash', 'fact_check', 'failure_message',
+                'quality_check', 'reviewed_by', 'reviewed_at', 'review_note',
                 'published_url', 'published_at', 'updated_at',
             ]),
+            'variants.latestPublication' => fn ($query) => $query->select([
+                'article_distributions.id', 'article_distributions.article_id',
+                'article_distributions.distribution_channel_id', 'article_distributions.content_variant_id',
+                'article_distributions.content_variant_version_id', 'article_distributions.status',
+                'article_distributions.publication_mode', 'article_distributions.scheduled_for',
+                'article_distributions.published_version', 'article_distributions.published_at',
+                'article_distributions.remote_id', 'article_distributions.remote_url',
+                'article_distributions.last_error_message', 'article_distributions.attempt_count',
+                'article_distributions.updated_at',
+            ])->with('channel:id,name,domain'),
             'variants.versions' => fn ($query) => $query->select([
-                'id', 'content_variant_id', 'version', 'title', 'template_version', 'generation_meta',
+                'id', 'content_variant_id', 'version', 'change_type', 'title', 'template_version', 'generation_meta', 'quality_check',
                 'created_by', 'created_at',
             ])->with('creator:id,username'),
+            'variants.reviewer:id,username',
+            'variants.reviews' => fn ($query) => $query->select([
+                'id', 'content_variant_id', 'content_variant_version_id', 'reviewer_id', 'decision', 'note', 'created_at',
+            ])->with('reviewer:id,username')->latest('id'),
         ]);
 
         return view('admin.content-groups.show', [
@@ -85,6 +103,15 @@ class ContentGroupController extends Controller
             'adminSiteName' => AdminWeb::siteName(),
             'contentGroup' => $contentGroup,
             'platforms' => $this->platformCatalog->all(),
+            'wordpressChannels' => DistributionChannel::query()
+                ->select(['id', 'name', 'domain'])
+                ->where('channel_type', 'wordpress_rest')
+                ->where('status', DistributionChannel::STATUS_ACTIVE)
+                ->orderBy('name')
+                ->get(),
+            'wordpressPreflight' => ($wordPressVariant = $contentGroup->variants->firstWhere('platform', 'wordpress'))
+                ? $this->wordPressPublicationService->preflight($contentGroup, $wordPressVariant)
+                : ['blockers' => ['WordPress 主文章版本不存在。'], 'warnings' => []],
         ]);
     }
 
