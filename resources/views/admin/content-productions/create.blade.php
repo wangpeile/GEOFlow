@@ -81,6 +81,22 @@
                         </label>
                     @endforeach
                 </div>
+                <div class="grid grid-cols-1 gap-3 pt-2 lg:grid-cols-2">
+                    @foreach ($platformRequirements as $platform)
+                        <article class="rounded-md border border-gray-200 bg-gray-50 p-4">
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="text-sm font-semibold text-gray-900">{{ $platform['label'] }}</h3>
+                                <span class="rounded-full bg-white px-2 py-1 text-xs text-gray-500">{{ $platform['publishing_mode'] === 'automatic' ? '可自动发布' : '人工发布' }}</span>
+                            </div>
+                            <dl class="mt-3 space-y-2 text-xs leading-5 text-gray-600">
+                                <div><dt class="inline font-semibold text-gray-700">身份：</dt><dd class="inline">{{ $platform['content_identity'] }}</dd></div>
+                                <div><dt class="inline font-semibold text-gray-700">视角：</dt><dd class="inline">{{ $platform['perspective'] }}</dd></div>
+                                <div><dt class="inline font-semibold text-gray-700">链接：</dt><dd class="inline">{{ $platform['link_policy'] }}</dd></div>
+                                <div><dt class="inline font-semibold text-gray-700">写法：</dt><dd class="inline">{{ $platform['instructions'] }}</dd></div>
+                            </dl>
+                        </article>
+                    @endforeach
+                </div>
             </fieldset>
 
             <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">

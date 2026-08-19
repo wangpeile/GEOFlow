@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Admin;
 use App\Models\ArticleType;
+use App\Models\Author;
+use App\Models\Category;
 use App\Models\ContentProduction;
 use App\Models\WritingRule;
 use App\Services\GeoFlow\WritingRuleVersionService;
@@ -109,6 +111,7 @@ class WritingRuleManagementTest extends TestCase
         $type = $this->articleType($admin);
         $service = app(WritingRuleVersionService::class);
         $rule = $service->create($admin, $this->rulePayload($type));
+        [$categoryId, $authorId] = $this->ownership();
 
         $this->actingAs($admin, 'admin')
             ->post(route('admin.content-productions.store'), [
@@ -118,6 +121,8 @@ class WritingRuleManagementTest extends TestCase
                 'mode' => 'guided',
                 'language' => 'zh_CN',
                 'writing_rule_id' => $rule->id,
+                'category_id' => $categoryId,
+                'author_id' => $authorId,
                 'target_platforms' => ['wordpress'],
             ])
             ->assertRedirect();
@@ -135,6 +140,8 @@ class WritingRuleManagementTest extends TestCase
         $this->assertSame(1, $production->writing_rule_snapshot['version']);
         $this->assertSame('professional', $production->writing_rule_snapshot['settings']['tone']);
         $this->assertSame(1200, $production->writing_rule_snapshot['settings']['min_words']);
+        $this->assertSame('official_brand', $production->writing_rule_snapshot['settings']['publisher_identity']);
+        $this->assertSame('https://example.com/product', $production->writing_rule_snapshot['settings']['internal_links'][0]['url']);
         $this->assertSame($originalSnapshot, $production->writing_rule_snapshot);
     }
 
@@ -155,6 +162,24 @@ class WritingRuleManagementTest extends TestCase
             ]))
             ->assertRedirect(route('admin.writing-rules.create'))
             ->assertSessionHasErrors(['include_citations', 'cta_text']);
+
+        $this->assertDatabaseCount('writing_rules', 0);
+    }
+
+    #[Test]
+    public function official_brand_rules_require_brand_and_same_site_internal_links(): void
+    {
+        $admin = $this->admin('super_admin');
+        $type = $this->articleType($admin);
+
+        $this->actingAs($admin, 'admin')
+            ->from(route('admin.writing-rules.create'))
+            ->post(route('admin.writing-rules.store'), $this->rulePayload($type, [
+                'brand_name' => '',
+                'internal_links' => "产品介绍|https://other.example/product",
+            ]))
+            ->assertRedirect(route('admin.writing-rules.create'))
+            ->assertSessionHasErrors(['brand_name', 'internal_links.0.url']);
 
         $this->assertDatabaseCount('writing_rules', 0);
     }
@@ -201,6 +226,7 @@ class WritingRuleManagementTest extends TestCase
         $admin = $this->admin('super_admin');
         $type = $this->articleType($admin);
         $rule = app(WritingRuleVersionService::class)->create($admin, $this->rulePayload($type));
+        [$categoryId, $authorId] = $this->ownership();
 
         foreach (['guided', 'standard'] as $mode) {
             $this->actingAs($admin, 'admin')->post(route('admin.content-productions.store'), [
@@ -210,6 +236,8 @@ class WritingRuleManagementTest extends TestCase
                 'mode' => $mode,
                 'language' => 'zh_CN',
                 'writing_rule_id' => $rule->id,
+                'category_id' => $categoryId,
+                'author_id' => $authorId,
             ])->assertRedirect();
         }
 
@@ -255,6 +283,15 @@ class WritingRuleManagementTest extends TestCase
         ], $overrides));
     }
 
+    /** @return array{int,int} */
+    private function ownership(): array
+    {
+        $category = Category::query()->create(['name' => '内容生产', 'slug' => 'content-production']);
+        $author = Author::query()->create(['name' => '品牌编辑', 'slug' => 'brand-editor']);
+
+        return [$category->id, $author->id];
+    }
+
     /** @param array<string, mixed> $overrides @return array<string, mixed> */
     private function rulePayload(ArticleType $type, array $overrides = []): array
     {
@@ -266,6 +303,9 @@ class WritingRuleManagementTest extends TestCase
             'country' => 'CN',
             'tone' => 'professional',
             'perspective' => 'auto',
+            'publisher_identity' => 'official_brand',
+            'brand_name' => '示例品牌',
+            'official_site_url' => 'https://example.com',
             'formality' => 'formal',
             'creativity' => 30,
             'min_words' => 1200,
@@ -274,6 +314,9 @@ class WritingRuleManagementTest extends TestCase
             'max_headings' => 8,
             'include_citations' => true,
             'include_internal_links' => true,
+            'internal_links' => [
+                ['anchor' => '产品介绍', 'url' => 'https://example.com/product'],
+            ],
             'include_external_links' => true,
             'include_faq' => true,
             'include_cta' => false,

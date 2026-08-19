@@ -22,6 +22,9 @@ class StoreWritingRuleRequest extends FormRequest
             'include_faq' => $this->boolean('include_faq'),
             'include_cta' => $this->boolean('include_cta'),
             'is_active' => $this->boolean('is_active'),
+            'internal_links' => is_array($this->input('internal_links'))
+                ? $this->input('internal_links')
+                : $this->normalizeInternalLinks((string) $this->input('internal_links', '')),
         ]);
     }
 
@@ -35,6 +38,14 @@ class StoreWritingRuleRequest extends FormRequest
             'country' => ['required', Rule::in(['CN'])],
             'tone' => ['required', Rule::in(['professional', 'neutral', 'friendly', 'authoritative', 'conversational'])],
             'perspective' => ['required', Rule::in(['auto', 'first_singular', 'first_plural', 'second', 'third'])],
+            'publisher_identity' => ['required', Rule::in(['official_brand', 'independent_editorial'])],
+            'brand_name' => ['nullable', 'string', 'max:255'],
+            'official_site_url' => [
+                'nullable',
+                'url:http,https',
+                'max:2048',
+                Rule::requiredIf($this->boolean('include_internal_links')),
+            ],
             'formality' => ['required', Rule::in(['auto', 'formal', 'informal'])],
             'creativity' => ['required', 'integer', 'between:0,100'],
             'min_words' => ['required', 'integer', 'between:300,10000'],
@@ -43,6 +54,9 @@ class StoreWritingRuleRequest extends FormRequest
             'max_headings' => ['required', 'integer', 'between:2,20', 'gte:min_headings'],
             'include_citations' => ['required', 'boolean'],
             'include_internal_links' => ['required', 'boolean'],
+            'internal_links' => ['nullable', 'array', 'max:50'],
+            'internal_links.*.anchor' => ['required', 'string', 'max:100'],
+            'internal_links.*.url' => ['required', 'url:http,https', 'max:2048'],
             'include_external_links' => ['required', 'boolean'],
             'include_faq' => ['required', 'boolean'],
             'include_cta' => ['required', 'boolean'],
@@ -68,7 +82,36 @@ class StoreWritingRuleRequest extends FormRequest
                 if ($this->boolean('include_cta') && trim((string) $this->input('cta_text')) === '') {
                     $validator->errors()->add('cta_text', '启用行动号召后必须填写行动号召内容。');
                 }
+                if ($this->input('publisher_identity') === 'official_brand' && trim((string) $this->input('brand_name')) === '') {
+                    $validator->errors()->add('brand_name', '厂商官网视角必须填写品牌或厂商名称。');
+                }
+                if ($this->boolean('include_internal_links') && empty($this->input('internal_links', []))) {
+                    $validator->errors()->add('internal_links', '启用内部链接后，至少填写一条“锚文本|URL”。');
+                }
+                $officialHost = mb_strtolower((string) parse_url((string) $this->input('official_site_url'), PHP_URL_HOST));
+                foreach ((array) $this->input('internal_links', []) as $index => $link) {
+                    $linkHost = mb_strtolower((string) parse_url((string) data_get($link, 'url'), PHP_URL_HOST));
+                    if ($officialHost !== '' && $linkHost !== '' && $linkHost !== $officialHost && ! str_ends_with($linkHost, '.'.$officialHost)) {
+                        $validator->errors()->add("internal_links.{$index}.url", '内部链接必须属于官方网站域名或其子域名。');
+                    }
+                }
             },
         ];
+    }
+
+    /** @return list<array{anchor:string,url:string}> */
+    private function normalizeInternalLinks(string $value): array
+    {
+        return collect(preg_split('/\R/u', $value) ?: [])
+            ->map(function (string $line): ?array {
+                [$anchor, $url] = array_pad(explode('|', trim($line), 2), 2, '');
+                $anchor = trim($anchor);
+                $url = trim($url);
+
+                return $anchor !== '' || $url !== '' ? ['anchor' => $anchor, 'url' => $url] : null;
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 }

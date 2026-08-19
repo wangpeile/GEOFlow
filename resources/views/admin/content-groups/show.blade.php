@@ -103,8 +103,13 @@
                             <dt class="text-gray-500">{{ __('admin.content_groups.content_range') }}</dt>
                             <dd class="mt-1 font-semibold text-gray-900">{{ ($template['content_min_chars'] ?? '—').'–'.($template['content_max_chars'] ?? '—') }}</dd>
                         </div>
+                        <div><dt class="text-gray-500">发布身份</dt><dd class="mt-1 font-semibold text-gray-900">{{ $template['content_identity'] ?? '—' }}</dd></div>
+                        <div><dt class="text-gray-500">叙述视角</dt><dd class="mt-1 font-semibold text-gray-900">{{ $template['perspective'] ?? '—' }}</dd></div>
                     </dl>
                     <div class="mt-5 rounded-md bg-gray-50 p-4 text-sm leading-6 text-gray-600">{{ $template['instructions'] ?? '' }}</div>
+                    @if (!empty($template['link_policy']))
+                        <div class="mt-3 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800"><span class="font-semibold">链接要求：</span>{{ $template['link_policy'] }}</div>
+                    @endif
                     @if ($variant->title !== '')
                         <div class="mt-5 border-t border-gray-100 pt-5">
                             <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ __('admin.content_groups.current_title') }}</div>

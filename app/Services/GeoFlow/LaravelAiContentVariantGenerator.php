@@ -84,6 +84,7 @@ final class LaravelAiContentVariantGenerator implements ContentVariantGenerator
     {
         return <<<'PROMPT'
 你是 GEOFlow 的中文多平台内容改写 Agent。基于源文章改写，不得增加源文没有的事实、数字、案例、引语或承诺。保留核心观点与事实边界，但标题、开篇、结构和语气必须符合目标平台规则。全文使用简体中文。
+源文章是厂商官方网站的第一方内容。改写到外部内容平台时，必须切换为平台规则指定的编辑视角，不得照搬官网的“我们”口吻，不得假装平台账号就是产品厂商；需要提及厂商时使用品牌名称或“该品牌”。官网内链不应批量保留，只有平台规则明确允许的来源链接才可保留。
 只输出合法 JSON 对象，不要输出代码围栏或解释。JSON 字段必须为 title、excerpt、content、tags、image_requirements；tags 和 image_requirements 必须是字符串数组。
 PROMPT;
     }

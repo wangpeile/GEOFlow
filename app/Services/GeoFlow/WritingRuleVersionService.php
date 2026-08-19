@@ -60,9 +60,10 @@ final class WritingRuleVersionService
     private function createVersion(WritingRule $rule, Admin $admin, int $version, array $attributes): WritingRuleVersion
     {
         $settings = Arr::only($attributes, [
-            'language', 'country', 'tone', 'perspective', 'formality', 'creativity',
+            'language', 'country', 'tone', 'perspective', 'publisher_identity', 'brand_name',
+            'official_site_url', 'formality', 'creativity',
             'min_words', 'max_words', 'min_headings', 'max_headings', 'include_citations',
-            'include_internal_links', 'include_external_links', 'include_faq', 'include_cta',
+            'include_internal_links', 'internal_links', 'include_external_links', 'include_faq', 'include_cta',
             'cta_text', 'knowledge_base_ids', 'sensitive_word_ids', 'brand_profile', 'instructions',
         ]);
         $settings['knowledge_base_ids'] = array_values(array_unique(array_map('intval', $settings['knowledge_base_ids'] ?? [])));

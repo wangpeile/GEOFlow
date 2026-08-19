@@ -5,6 +5,10 @@
     $value = fn (string $key, mixed $default = null) => old($key, $settings[$key] ?? $default);
     $selectedKnowledgeBases = array_map('strval', old('knowledge_base_ids', $settings['knowledge_base_ids'] ?? []));
     $selectedSensitiveWords = array_map('strval', old('sensitive_word_ids', $settings['sensitive_word_ids'] ?? []));
+    $internalLinks = old('internal_links', $settings['internal_links'] ?? []);
+    $internalLinks = is_array($internalLinks)
+        ? collect($internalLinks)->map(fn (array $link) => ($link['anchor'] ?? '').'|'.($link['url'] ?? ''))->implode("\n")
+        : (string) $internalLinks;
 @endphp
 
 @section('content')
@@ -33,6 +37,9 @@
                 <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">目标国家/地区</span><select name="country" class="rounded-md border-gray-300 text-sm"><option value="CN">中国</option></select></label>
                 <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">文章语气</span><select name="tone" class="rounded-md border-gray-300 text-sm">@foreach (['professional'=>'专业','neutral'=>'中立','friendly'=>'亲切','authoritative'=>'权威','conversational'=>'对话式'] as $key=>$label)<option value="{{ $key }}" @selected($value('tone','professional')===$key)>{{ $label }}</option>@endforeach</select></label>
                 <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">人称角度</span><select name="perspective" class="rounded-md border-gray-300 text-sm">@foreach (['auto'=>'自动','first_singular'=>'第一人称单数','first_plural'=>'第一人称复数','second'=>'第二人称','third'=>'第三人称'] as $key=>$label)<option value="{{ $key }}" @selected($value('perspective','auto')===$key)>{{ $label }}</option>@endforeach</select></label>
+                <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">发布者身份</span><select name="publisher_identity" class="rounded-md border-gray-300 text-sm">@foreach (['official_brand'=>'厂商/品牌官方网站','independent_editorial'=>'独立第三方编辑'] as $key=>$label)<option value="{{ $key }}" @selected($value('publisher_identity','official_brand')===$key)>{{ $label }}</option>@endforeach</select><span class="text-xs text-gray-500">WordPress 官网首发建议选择厂商/品牌官方网站。</span></label>
+                <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">品牌或厂商名称</span><input name="brand_name" maxlength="255" value="{{ $value('brand_name') }}" class="rounded-md border-gray-300 text-sm" placeholder="例如：红鲸科技"></label>
+                <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">官方网站</span><input type="url" name="official_site_url" maxlength="2048" value="{{ $value('official_site_url') }}" class="rounded-md border-gray-300 text-sm" placeholder="https://www.example.com"></label>
                 <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">正式程度</span><select name="formality" class="rounded-md border-gray-300 text-sm">@foreach (['auto'=>'自动','formal'=>'正式','informal'=>'非正式'] as $key=>$label)<option value="{{ $key }}" @selected($value('formality','auto')===$key)>{{ $label }}</option>@endforeach</select></label>
                 <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">创意程度（0-100）</span><input type="number" name="creativity" min="0" max="100" value="{{ $value('creativity',30) }}" class="rounded-md border-gray-300 text-sm"></label>
                 <label class="flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">最少字数</span><input type="number" name="min_words" min="300" max="10000" value="{{ $value('min_words',1000) }}" class="rounded-md border-gray-300 text-sm"></label>
@@ -50,6 +57,7 @@
                     @endforeach
                 </div>
                 <label class="mt-5 flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">行动号召内容</span><textarea name="cta_text" rows="2" maxlength="500" class="rounded-md border-gray-300 text-sm">{{ $value('cta_text') }}</textarea></label>
+                <label class="mt-5 flex flex-col gap-2"><span class="text-sm font-semibold text-gray-700">官网内部链接</span><textarea name="internal_links" rows="5" maxlength="10000" class="rounded-md border-gray-300 text-sm" placeholder="每行一条：锚文本|https://www.example.com/page">{{ $internalLinks }}</textarea><span class="text-xs leading-5 text-gray-500">正文只会从这里选择与章节真正相关的链接，不会编造 URL；关闭“包含内部链接”后不会使用。</span></label>
             </section>
 
             <section class="grid grid-cols-1 gap-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm lg:grid-cols-2">

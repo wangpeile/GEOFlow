@@ -31,6 +31,12 @@ class ContentQualityGateServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        app(ArticleRiskScanner::class)->clearRuleCache();
+    }
+
     public function test_quality_report_records_blockers_warnings_and_is_idempotent(): void
     {
         [$admin, $production, $version] = $this->context();
@@ -81,7 +87,47 @@ class ContentQualityGateServiceTest extends TestCase
 
         $this->assertNotContains('required_citation_missing', collect($report->issues)->pluck('code')->all());
         $this->assertNotContains('unverified_citation', collect($report->issues)->pluck('code')->all());
-        $this->assertSame(0, $report->summary['blockers']);
+        $this->assertSame(0, $report->summary['blockers'], json_encode($report->issues, JSON_UNESCAPED_UNICODE));
+    }
+
+    public function test_configured_official_internal_link_is_allowed_and_missing_link_or_outsider_voice_is_reported(): void
+    {
+        [$admin, $production, $version] = $this->context(
+            bodySuffix: "\n\n我们提供[产品能力说明](https://example.test/product)，帮助团队完成部署。",
+        );
+        $production->forceFill([
+            'writing_rule_snapshot' => [
+                'settings' => [
+                    'publisher_identity' => 'official_brand',
+                    'brand_name' => '示例科技',
+                    'official_site_url' => 'https://example.test',
+                    'include_internal_links' => true,
+                    'internal_links' => [
+                        ['anchor' => '产品能力说明', 'url' => 'https://example.test/product'],
+                    ],
+                ],
+            ],
+        ])->save();
+
+        $report = app(QualityGateService::class)->inspect($admin, $production->fresh(), $version);
+        $codes = collect($report->issues)->pluck('code')->all();
+
+        $this->assertNotContains('unverified_citation', $codes);
+        $this->assertNotContains('official_internal_link_missing', $codes);
+        $this->assertNotContains('official_voice_inconsistent', $codes);
+
+        [$secondAdmin, $secondProduction, $secondVersion] = $this->context(
+            bodySuffix: "\n\n据了解，该厂商可以帮助团队完成部署。",
+        );
+        $secondProduction->forceFill([
+            'writing_rule_snapshot' => $production->writing_rule_snapshot,
+        ])->save();
+
+        $secondReport = app(QualityGateService::class)->inspect($secondAdmin, $secondProduction->fresh(), $secondVersion);
+        $secondCodes = collect($secondReport->issues)->pluck('code')->all();
+
+        $this->assertContains('official_internal_link_missing', $secondCodes);
+        $this->assertContains('official_voice_inconsistent', $secondCodes);
     }
 
     public function test_targeted_repair_creates_a_new_version_and_rechecks_quality(): void
@@ -193,8 +239,9 @@ class ContentQualityGateServiceTest extends TestCase
      */
     private function context(string $bodySuffix = ''): array
     {
+        $sequence = ContentProduction::query()->count() + 1;
         $admin = Admin::query()->create([
-            'username' => 'quality-admin',
+            'username' => 'quality-admin-'.$sequence,
             'password' => 'secret',
             'role' => 'super_admin',
             'status' => 'active',
@@ -215,8 +262,8 @@ class ContentQualityGateServiceTest extends TestCase
             ],
         ])->save();
         $category = Category::query()->create([
-            'name' => '质量门禁',
-            'slug' => 'quality-gate',
+            'name' => '质量门禁 '.$sequence,
+            'slug' => 'quality-gate-'.$sequence,
         ]);
         $author = Author::query()->create([
             'name' => '质量团队',
@@ -228,7 +275,7 @@ class ContentQualityGateServiceTest extends TestCase
             .$bodySuffix;
         $article = Article::query()->create([
             'title' => '企业视频会议系统选型与实施指南',
-            'slug' => 'quality-gate-test',
+            'slug' => 'quality-gate-test-'.$sequence,
             'category_id' => $category->id,
             'author_id' => $author->id,
             'excerpt' => '本文介绍企业视频会议系统的选型、实施与验收方法。',

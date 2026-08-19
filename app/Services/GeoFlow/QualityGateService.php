@@ -19,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 
 final class QualityGateService
 {
-    public const RULESET_VERSION = 'quality-v1';
+    public const RULESET_VERSION = 'quality-v2';
 
     public function __construct(
         private readonly ArticleRiskScanner $riskScanner,
@@ -207,7 +207,11 @@ final class QualityGateService
             );
         }
 
-        $issues = array_merge($issues, $this->citationIssues($production, $version));
+        $issues = array_merge(
+            $issues,
+            $this->citationIssues($production, $version),
+            $this->officialWebsiteIssues($production, $version),
+        );
         $plainLength = mb_strlen(preg_replace('/\s+/u', '', strip_tags($version->body)) ?: '');
         $minimum = max(100, (int) data_get($production->context, 'length_min', 500));
         $maximum = max($minimum, (int) data_get($production->context, 'length_max', 5000));
@@ -304,9 +308,12 @@ final class QualityGateService
         }
 
         preg_match_all('~https?://[^\s<>)"\']+~iu', $version->body, $matches);
-        $allowedUrls = $evidences->pluck('source_url')->filter()->map(
+        $internalUrls = collect(data_get($production->writing_rule_snapshot, 'settings.internal_links', []))
+            ->pluck('url')
+            ->filter();
+        $allowedUrls = $evidences->pluck('source_url')->filter()->merge($internalUrls)->map(
             fn (string $url): string => rtrim($url, '/')
-        );
+        )->unique()->values();
         foreach (array_unique($matches[0] ?? []) as $url) {
             if ($allowedUrls->contains(rtrim($url, '/'))) {
                 continue;
@@ -320,6 +327,57 @@ final class QualityGateService
                 '请先将来源加入证据中心并核验内容，或删除该链接。',
                 false,
                 ['url' => $url],
+            );
+        }
+
+        return $issues;
+    }
+
+    /**
+     * @return list<array{id:string, code:string, severity:string, field:string, location:string, message:string, suggestion:?string, repairable:bool, metadata:array<string, mixed>}>
+     */
+    private function officialWebsiteIssues(ContentProduction $production, ArticleVersion $version): array
+    {
+        $settings = (array) data_get($production->writing_rule_snapshot, 'settings', []);
+        if (($settings['publisher_identity'] ?? 'official_brand') !== 'official_brand') {
+            return [];
+        }
+
+        $issues = [];
+        $outsiderExpressions = collect(['该厂商', '该公司', '据了解', '据该公司介绍'])
+            ->filter(fn (string $expression): bool => str_contains($version->body, $expression))
+            ->values();
+        if ($outsiderExpressions->isNotEmpty()) {
+            $issues[] = $this->issue(
+                'official_voice_inconsistent',
+                QualityIssueSeverity::Warning,
+                'body',
+                '全文',
+                '官网文章出现第三方观察者表达：'.$outsiderExpressions->implode('、').'。',
+                '请改用“我们”或品牌名称，从厂商官方网站的第一方视角表达。',
+                false,
+                ['expressions' => $outsiderExpressions->all()],
+            );
+        }
+
+        $configuredLinks = collect(($settings['include_internal_links'] ?? false) ? ($settings['internal_links'] ?? []) : [])
+            ->pluck('url')
+            ->filter()
+            ->map(fn (string $url): string => rtrim($url, '/'))
+            ->unique()
+            ->values();
+        if ($configuredLinks->isNotEmpty() && ! $configuredLinks->contains(
+            fn (string $url): bool => str_contains($version->body, $url)
+        )) {
+            $issues[] = $this->issue(
+                'official_internal_link_missing',
+                QualityIssueSeverity::Warning,
+                'body',
+                '全文',
+                '写作规则已启用官网内链，但正文没有使用任何已配置的内部链接。',
+                '请从写作规则的内链白名单中选择与正文语义相关的页面加入文章。',
+                false,
+                ['configured_count' => $configuredLinks->count()],
             );
         }
 

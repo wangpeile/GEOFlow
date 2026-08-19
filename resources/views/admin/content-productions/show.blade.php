@@ -23,9 +23,19 @@
         @include('admin.content-productions.partials.wizard-progress')
 
         @if ($production->writing_rule_snapshot)
+            @php($ruleSettings = (array) data_get($production->writing_rule_snapshot, 'settings', []))
             <section class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
                 <div class="font-semibold">写作规则：{{ data_get($production->writing_rule_snapshot, 'name') }} · v{{ data_get($production->writing_rule_snapshot, 'version') }}</div>
                 <div class="mt-1 text-xs text-blue-700">已保存不可变快照 · {{ data_get($production->writing_rule_snapshot, 'settings_hash') }}</div>
+                <dl class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div><dt class="text-xs font-semibold text-blue-700">首发渠道</dt><dd class="mt-1 font-semibold">WordPress 产品官网</dd></div>
+                    <div><dt class="text-xs font-semibold text-blue-700">发布者身份</dt><dd class="mt-1 font-semibold">{{ ($ruleSettings['publisher_identity'] ?? 'official_brand') === 'official_brand' ? '厂商/品牌官方网站' : '独立第三方编辑' }}</dd></div>
+                    <div><dt class="text-xs font-semibold text-blue-700">品牌/厂商</dt><dd class="mt-1 font-semibold">{{ $ruleSettings['brand_name'] ?? '未配置' }}</dd></div>
+                    <div><dt class="text-xs font-semibold text-blue-700">叙述人称</dt><dd class="mt-1 font-semibold">{{ $ruleSettings['perspective'] ?? '第一人称复数（默认）' }}</dd></div>
+                    <div class="sm:col-span-2"><dt class="text-xs font-semibold text-blue-700">官网内链</dt><dd class="mt-1">{{ !empty($ruleSettings['include_internal_links']) ? count((array) ($ruleSettings['internal_links'] ?? [])).' 条可用链接' : '不添加' }}</dd></div>
+                    <div class="sm:col-span-2"><dt class="text-xs font-semibold text-blue-700">官网地址</dt><dd class="mt-1 break-all">{{ $ruleSettings['official_site_url'] ?? '未配置' }}</dd></div>
+                </dl>
+                @if (!empty($ruleSettings['brand_profile']))<div class="mt-3 rounded-md bg-white/70 p-3 text-xs leading-5"><span class="font-semibold">品牌资料：</span>{{ $ruleSettings['brand_profile'] }}</div>@endif
             </section>
         @endif
 

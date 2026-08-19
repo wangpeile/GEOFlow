@@ -15,6 +15,7 @@ use App\Models\UrlImportJob;
 use App\Models\WritingRule;
 use App\Services\GeoFlow\ContentProductionOrchestrator;
 use App\Support\AdminWeb;
+use App\Support\GeoFlow\ContentPlatformCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,10 @@ use Illuminate\View\View;
 
 class ContentProductionController extends Controller
 {
-    public function __construct(private readonly ContentProductionOrchestrator $orchestrator) {}
+    public function __construct(
+        private readonly ContentProductionOrchestrator $orchestrator,
+        private readonly ContentPlatformCatalog $platformCatalog,
+    ) {}
 
     public function index(): View
     {
@@ -58,6 +62,16 @@ class ContentProductionController extends Controller
                 ->get(),
             'categories' => Category::query()->select(['id', 'name'])->orderBy('name')->get(),
             'authors' => Author::query()->select(['id', 'name'])->orderBy('name')->get(),
+            'platformRequirements' => collect([
+                'wordpress' => 'wordpress',
+                'baijiahao' => 'baijiahao',
+                'qq' => 'qq_news',
+                'netease' => 'netease',
+                'sohu' => 'sohu',
+                'toutiao' => 'toutiao',
+                'zhihu' => 'zhihu',
+                'wechat' => 'wechat_official',
+            ])->map(fn (string $platform): array => $this->platformCatalog->get($platform))->all(),
         ]));
     }
 
