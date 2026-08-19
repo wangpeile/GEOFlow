@@ -218,6 +218,20 @@ class WritingRuleManagementTest extends TestCase
         $this->assertDatabaseCount('writing_rule_versions', 8);
         $this->assertSame(8, ArticleType::query()->where('is_system', true)->count());
         $this->assertSame(8, WritingRule::query()->where('is_preset', true)->count());
+        $this->assertSame(
+            8,
+            WritingRule::query()
+                ->where('is_preset', true)
+                ->with('versions')
+                ->get()
+                ->filter(function (WritingRule $rule): bool {
+                    $settings = $rule->versions->firstWhere('version', $rule->current_version)?->settings;
+
+                    return data_get($settings, 'publisher_identity') === 'independent_editorial'
+                        && data_get($settings, 'perspective') === 'third';
+                })
+                ->count(),
+        );
     }
 
     #[Test]
