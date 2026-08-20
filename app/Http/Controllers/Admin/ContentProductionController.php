@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\ContentDirectionKind;
+use App\Enums\ContentProductionStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreContentProductionRequest;
 use App\Http\Requests\Admin\UpdateContentProductionOwnershipRequest;
@@ -17,6 +18,7 @@ use App\Services\GeoFlow\ContentProductionOrchestrator;
 use App\Support\AdminWeb;
 use App\Support\GeoFlow\ContentPlatformCatalog;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
@@ -32,6 +34,11 @@ class ContentProductionController extends Controller
     {
         $this->ensureEnabled();
 
+        $statusCounts = ContentProduction::query()
+            ->selectRaw('status, count(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
         $productions = ContentProduction::query()
             ->select([
                 'id', 'uuid', 'name', 'topic', 'mode', 'status', 'current_stage', 'language',
@@ -45,6 +52,38 @@ class ContentProductionController extends Controller
         return view('admin.content-productions.index', $this->viewData([
             'productions' => $productions,
             'creationModes' => $this->creationModes(),
+            'workQueues' => [
+                [
+                    'label' => '待继续',
+                    'description' => '等待补充资料、确认方向或继续写作的文章。',
+                    'count' => (int) ($statusCounts[ContentProductionStatus::Draft->value] ?? 0)
+                        + (int) ($statusCounts[ContentProductionStatus::WaitingInput->value] ?? 0),
+                    'icon' => 'pencil-line',
+                    'tone' => 'blue',
+                ],
+                [
+                    'label' => '生成中',
+                    'description' => '已经进入队列或正在执行生产阶段。',
+                    'count' => (int) ($statusCounts[ContentProductionStatus::Queued->value] ?? 0)
+                        + (int) ($statusCounts[ContentProductionStatus::Running->value] ?? 0),
+                    'icon' => 'loader-circle',
+                    'tone' => 'amber',
+                ],
+                [
+                    'label' => '待审核',
+                    'description' => '文章草稿或质量检查已经完成，等待人工确认。',
+                    'count' => (int) ($statusCounts[ContentProductionStatus::WaitingReview->value] ?? 0),
+                    'icon' => 'clipboard-check',
+                    'tone' => 'violet',
+                ],
+                [
+                    'label' => '已完成',
+                    'description' => '主文章已完成，可进入发布包生成与分发。',
+                    'count' => (int) ($statusCounts[ContentProductionStatus::Completed->value] ?? 0),
+                    'icon' => 'circle-check-big',
+                    'tone' => 'emerald',
+                ],
+            ],
         ]));
     }
 
@@ -84,10 +123,10 @@ class ContentProductionController extends Controller
 
         return redirect()
             ->route('admin.content-productions.show', $production)
-            ->with('message', '内容生产项目已创建。');
+            ->with('message', '文章工作单已创建。');
     }
 
-    public function show(ContentProduction $contentProduction): View
+    public function show(Request $request, ContentProduction $contentProduction): View
     {
         $this->ensureEnabled();
 
@@ -119,6 +158,12 @@ class ContentProductionController extends Controller
             ->values();
         $wizardSteps = $this->wizardSteps($contentProduction, $latestSections->isNotEmpty());
         $resumeStep = collect($wizardSteps)->firstWhere('state', 'current') ?? collect($wizardSteps)->last();
+        $requestedWorkbenchStep = $request->query('stage');
+        $activeWorkbenchStep = $this->activeWorkbenchStep(
+            is_string($requestedWorkbenchStep) ? $requestedWorkbenchStep : null,
+            $wizardSteps,
+            (string) data_get($resumeStep, 'key'),
+        );
 
         return view('admin.content-productions.show', $this->viewData([
             'production' => $contentProduction,
@@ -127,6 +172,7 @@ class ContentProductionController extends Controller
             'currentQualityReport' => $contentProduction->qualityReports->first(),
             'wizardSteps' => $wizardSteps,
             'resumeStep' => $resumeStep,
+            'activeWorkbenchStep' => $activeWorkbenchStep,
             'knowledgeBases' => KnowledgeBase::query()->select('id', 'name')->latest()->get(),
             'categories' => Category::query()->select(['id', 'name'])->orderBy('name')->get(),
             'authors' => Author::query()->select(['id', 'name'])->orderBy('name')->get(),
@@ -181,28 +227,28 @@ class ContentProductionController extends Controller
     {
         return [
             [
-                'name' => '可视化 AI 创作',
-                'description' => '按步骤完成资料、标题、大纲、分段写作和质量检查。',
+                'name' => '新建文章',
+                'description' => '为一篇主文章建立工作单，按步骤完成资料、标题、大纲、写作和质量检查。',
                 'status' => 'available',
                 'route' => route('admin.content-productions.create'),
                 'icon' => 'wand-sparkles',
             ],
             [
-                'name' => '批量自动创作',
+                'name' => '生产计划',
                 'description' => '复用写作规则，按关键词或选题批量排队生成。',
                 'status' => 'available',
                 'route' => route('admin.content-automations.index'),
                 'icon' => 'layers-3',
             ],
             [
-                'name' => '根据 SERP 创作',
-                'description' => '分析搜索结果、竞争内容和内容缺口后再进入创作。',
+                'name' => '从资料创作',
+                'description' => '创建工作单后，在资料研究阶段加入知识库、URL 与 SERP 证据。',
                 'status' => 'available',
-                'route' => route('admin.content-productions.create', ['mode' => 'serp']),
+                'route' => route('admin.content-productions.create'),
                 'icon' => 'search-check',
             ],
             [
-                'name' => '模板 AI 创作',
+                'name' => '自由编辑',
                 'description' => '从编辑器自由写作，并逐步使用标题、大纲和段落助手。',
                 'status' => 'basic',
                 'route' => route('admin.articles.create'),
@@ -222,14 +268,12 @@ class ContentProductionController extends Controller
             ->map->first();
 
         $definitions = [
-            ['key' => 'topic', 'label' => '主题与平台', 'anchor' => 'project-context', 'done' => true],
-            ['key' => 'research', 'label' => '文章类型与资料', 'anchor' => 'research-evidence', 'done' => $production->evidences->contains(fn ($evidence) => $evidence->usage->value !== 'disabled') && $directions->has(ContentDirectionKind::Brief->value)],
-            ['key' => 'keywords', 'label' => '主次关键词', 'anchor' => 'content-direction', 'done' => $directions->has(ContentDirectionKind::Brief->value)],
-            ['key' => 'title', 'label' => '标题', 'anchor' => 'content-direction', 'done' => $directions->has(ContentDirectionKind::Titles->value)],
-            ['key' => 'structure', 'label' => '结构与篇幅', 'anchor' => 'content-direction', 'done' => $directions->has(ContentDirectionKind::Brief->value)],
-            ['key' => 'outline', 'label' => '大纲', 'anchor' => 'content-direction', 'done' => $directions->has(ContentDirectionKind::Outlines->value)],
-            ['key' => 'extras', 'label' => '额外功能', 'anchor' => 'article-drafting', 'done' => $hasSections],
-            ['key' => 'generate', 'label' => '生成与质量检查', 'anchor' => 'quality-gate', 'done' => $production->qualityReports->isNotEmpty()],
+            ['key' => 'context', 'label' => '文章设置', 'description' => '主题、规则、分类与目标平台', 'done' => true],
+            ['key' => 'research', 'label' => '资料研究', 'description' => '知识库、URL 与 SERP 证据', 'done' => $production->evidences->contains(fn ($evidence) => $evidence->usage->value !== 'disabled')],
+            ['key' => 'direction', 'label' => '创作方向', 'description' => '关键词、标题与大纲', 'done' => $directions->has(ContentDirectionKind::Brief->value) && $directions->has(ContentDirectionKind::Outlines->value)],
+            ['key' => 'drafting', 'label' => '撰写文章', 'description' => '建立章节、生成草稿并组装文章', 'done' => $hasSections && $production->articleVersions->isNotEmpty()],
+            ['key' => 'quality', 'label' => '质量审核', 'description' => '检查、修复与人工确认', 'done' => $production->qualityReports->isNotEmpty()],
+            ['key' => 'delivery', 'label' => '发布与改写', 'description' => '建立发布包并生成平台版本', 'done' => $production->status === ContentProductionStatus::Completed],
         ];
         $currentFound = false;
 
@@ -248,14 +292,28 @@ class ContentProductionController extends Controller
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $wizardSteps
+     */
+    private function activeWorkbenchStep(?string $requestedStep, array $wizardSteps, string $fallback): string
+    {
+        $availableSteps = collect($wizardSteps)->pluck('key')->all();
+
+        if (is_string($requestedStep) && in_array($requestedStep, $availableSteps, true)) {
+            return $requestedStep;
+        }
+
+        return in_array($fallback, $availableSteps, true) ? $fallback : 'context';
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function viewData(array $data = []): array
     {
         return array_merge([
-            'pageTitle' => '内容生产项目',
-            'activeMenu' => 'articles',
+            'pageTitle' => '内容生产',
+            'activeMenu' => 'content_production',
             'adminSiteName' => AdminWeb::siteName(),
         ], $data);
     }

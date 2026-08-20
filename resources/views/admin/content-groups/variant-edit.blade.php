@@ -3,7 +3,7 @@
 @section('content')
     <div class="mx-auto max-w-5xl px-4 sm:px-0">
         <a href="{{ route('admin.content-groups.show', $contentGroup) }}" class="inline-flex items-center text-sm font-semibold text-gray-500 hover:text-gray-700">
-            <i data-lucide="arrow-left" class="mr-2 h-4 w-4"></i>返回内容组
+            <i data-lucide="arrow-left" class="mr-2 h-4 w-4"></i>返回发布包
         </a>
         <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>

@@ -54,7 +54,7 @@ class AdminContentProductionWorkbenchTest extends TestCase
     }
 
     #[Test]
-    public function super_admin_can_open_and_resume_a_project_without_rendering_untrusted_html(): void
+    public function super_admin_can_open_and_resume_an_article_work_order_without_rendering_untrusted_html(): void
     {
         config()->set('geoflow.content_production_pipeline_enabled', true);
         $admin = $this->admin('super_admin');
@@ -67,18 +67,48 @@ class AdminContentProductionWorkbenchTest extends TestCase
         $this->actingAs($admin, 'admin')
             ->get(route('admin.content-productions.index'))
             ->assertOk()
-            ->assertSee('选择创作方式')
-            ->assertSee('继续创作')
+            ->assertSee('新建文章')
+            ->assertSee('文章工作单')
+            ->assertSee('发布包')
+            ->assertSee('生产计划')
+            ->assertSee('工作队列')
+            ->assertSee('打开工作台')
             ->assertSeeText('<script>alert("name")</script>')
             ->assertDontSee('<script>alert("name")</script>', false);
 
         $this->actingAs($admin, 'admin')
             ->get(route('admin.content-productions.show', $production))
             ->assertOk()
-            ->assertSee('主题与平台')
+            ->assertSee('文章工作台')
+            ->assertSee('文章设置')
             ->assertSee('研究与证据中心')
             ->assertSeeText('<img src=x onerror=alert("topic")>')
             ->assertDontSee('<img src=x onerror=alert("topic")>', false);
+    }
+
+    #[Test]
+    public function workbench_only_renders_the_selected_safe_stage(): void
+    {
+        config()->set('geoflow.content_production_pipeline_enabled', true);
+        $admin = $this->admin('super_admin');
+        $production = ContentProduction::factory()->create(['created_by_admin_id' => $admin->id]);
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.content-productions.show', ['contentProduction' => $production, 'stage' => 'drafting']))
+            ->assertOk()
+            ->assertSee('分段写作与文章组装')
+            ->assertDontSee('研究与证据中心');
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.content-productions.show', ['contentProduction' => $production, 'stage' => 'not-a-stage']))
+            ->assertOk()
+            ->assertSee('研究与证据中心');
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.content-productions.show', $production).'?stage[]=drafting')
+            ->assertOk()
+            ->assertSee('研究与证据中心')
+            ->assertDontSee('分段写作与文章组装');
     }
 
     #[Test]

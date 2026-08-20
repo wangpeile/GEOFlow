@@ -55,7 +55,7 @@
                             <td class="px-6 py-4 text-sm text-gray-600">{{ $schedule->status->value }} · 第 {{ $schedule->attempt_count }} 次</td>
                             <td class="px-6 py-4 text-sm text-gray-600">
                                 @if($schedule->contentProduction)
-                                    <a class="font-semibold text-blue-600" href="{{ route('admin.content-productions.show', $schedule->contentProduction) }}">查看内容项目</a>
+                                    <a class="font-semibold text-blue-600" href="{{ route('admin.content-productions.show', $schedule->contentProduction) }}">查看文章工作单</a>
                                 @endif
                                 @if($schedule->error_message)<div class="mt-1 max-w-xl text-xs text-red-600">{{ $schedule->error_message }}</div>@endif
                             </td>

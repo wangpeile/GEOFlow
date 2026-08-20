@@ -3,7 +3,7 @@
 @section('content')
     <div class="flex flex-col gap-6 px-4 sm:px-0">
         <div>
-            <a href="{{ route('admin.content-productions.index') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-800">← 返回生产项目</a>
+            <a href="{{ route('admin.content-productions.index') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-800">← 返回文章工作单</a>
             <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900">{{ $production->name }}</h1>
@@ -17,12 +17,23 @@
             <div><dt class="text-xs font-semibold uppercase text-gray-500">模式</dt><dd class="mt-1 text-sm text-gray-900">{{ $production->mode->value }}</dd></div>
             <div><dt class="text-xs font-semibold uppercase text-gray-500">语言</dt><dd class="mt-1 text-sm text-gray-900">{{ $production->language }}</dd></div>
             <div><dt class="text-xs font-semibold uppercase text-gray-500">创建人</dt><dd class="mt-1 text-sm text-gray-900">{{ $production->createdBy?->name ?: '系统' }}</dd></div>
-            <div><dt class="text-xs font-semibold uppercase text-gray-500">项目 UUID</dt><dd class="mt-1 break-all font-mono text-xs text-gray-700">{{ $production->uuid }}</dd></div>
+            <div><dt class="text-xs font-semibold uppercase text-gray-500">工作单编号</dt><dd class="mt-1 break-all font-mono text-xs text-gray-700">{{ $production->uuid }}</dd></div>
         </dl>
 
         @include('admin.content-productions.partials.wizard-progress')
 
-        @if ($production->writing_rule_snapshot)
+        @if ($activeWorkbenchStep === 'context')
+            <section class="rounded-xl border border-blue-200 bg-blue-50/60 p-6 shadow-sm">
+                <h2 class="text-lg font-semibold text-gray-900">文章设置</h2>
+                <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-600">这张工作单只负责一篇主文章。确认主题、规则、分类、作者和目标平台后，再进入资料研究与创作。</p>
+                <div class="mt-5 flex flex-wrap gap-3">
+                    <a href="{{ route('admin.content-productions.show', ['contentProduction' => $production, 'stage' => 'research']) }}" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">下一步：资料研究</a>
+                    <a href="{{ route('admin.content-groups.index') }}" class="rounded-md border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">查看发布包</a>
+                </div>
+            </section>
+        @endif
+
+        @if ($activeWorkbenchStep === 'context' && $production->writing_rule_snapshot)
             @php($ruleSettings = (array) data_get($production->writing_rule_snapshot, 'settings', []))
             <section class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
                 <div class="font-semibold">写作规则：{{ data_get($production->writing_rule_snapshot, 'name') }} · v{{ data_get($production->writing_rule_snapshot, 'version') }}</div>
@@ -39,16 +50,36 @@
             </section>
         @endif
 
+        @if ($activeWorkbenchStep === 'direction')
         <div id="content-direction" class="scroll-mt-6">
             @include('admin.content-productions.partials.direction')
         </div>
+        @endif
+        @if ($activeWorkbenchStep === 'drafting')
         <div id="article-drafting" class="scroll-mt-6">
             @include('admin.content-productions.partials.article-drafting')
         </div>
+        @endif
+        @if ($activeWorkbenchStep === 'quality' || $activeWorkbenchStep === 'delivery')
         <div id="quality-gate" class="scroll-mt-6">
             @include('admin.content-productions.partials.quality-gate')
         </div>
+        @endif
 
+        @if ($activeWorkbenchStep === 'delivery')
+            <section class="rounded-xl border border-violet-200 bg-violet-50/50 p-6 shadow-sm">
+                <h2 class="text-lg font-semibold text-gray-900">发布与多平台改写</h2>
+                <p class="mt-2 text-sm leading-6 text-gray-600">文章工作单完成主文章生产后，再建立发布包。发布包会保留主文章，并为每个平台创建独立、可审核的版本。</p>
+                <div class="mt-5 flex flex-wrap gap-3">
+                    <a href="{{ route('admin.content-groups.index') }}" class="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">进入发布包</a>
+                    @if ($production->article)
+                        <a href="{{ route('admin.articles.edit', ['articleId' => $production->article->id]) }}" class="rounded-md border border-violet-300 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50">查看主文章</a>
+                    @endif
+                </div>
+            </section>
+        @endif
+
+        @if ($activeWorkbenchStep === 'research')
         <section id="research-evidence" class="scroll-mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
             <div class="border-b border-gray-200 px-6 py-4">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -173,8 +204,10 @@
                 @endforelse
             </div>
         </section>
+        @endif
 
-        <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <details class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+            <summary class="cursor-pointer px-6 py-4 text-sm font-semibold text-gray-900 hover:bg-gray-50">查看阶段时间线</summary>
             <div class="border-b border-gray-200 px-6 py-4">
                 <h2 class="font-semibold text-gray-900">阶段时间线</h2>
                 <p class="mt-1 text-sm text-gray-500">失败阶段可以创建新的重试记录，历史尝试不会被覆盖。</p>
@@ -204,9 +237,10 @@
                     </div>
                 @endforeach
             </div>
-        </section>
+        </details>
 
-        <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <details class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+            <summary class="cursor-pointer px-6 py-4 text-sm font-semibold text-gray-900 hover:bg-gray-50">查看审计记录</summary>
             <div class="border-b border-gray-200 px-6 py-4">
                 <h2 class="font-semibold text-gray-900">审计事件</h2>
             </div>
@@ -223,6 +257,6 @@
                     <div class="px-6 py-8 text-center text-sm text-gray-500">暂无审计事件。</div>
                 @endforelse
             </div>
-        </section>
+        </details>
     </div>
 @endsection
