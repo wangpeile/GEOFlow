@@ -92,7 +92,8 @@
                             </div>
                             <p class="mt-2 text-sm leading-6 text-gray-600">{{ $template['style'] ?? '' }}</p>
                         </div>
-                        <span class="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{{ __('admin.content_groups.variant_statuses.'.$variant->status) }}</span>
+                                <span class="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{{ __('admin.content_groups.variant_statuses.'.$variant->status) }}</span>
+                                @if(isset($staleVariantReasons[$variant->id]))<span class="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">主文章已更新</span>@endif
                     </div>
                     <dl class="mt-5 grid grid-cols-2 gap-4 border-t border-gray-100 pt-5 text-sm">
                         <div>
@@ -151,6 +152,9 @@
                     @endif
                     @if ($variant->failure_message)
                         <div class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ $variant->failure_message }}</div>
+                    @endif
+                    @if(isset($staleVariantReasons[$variant->id]))
+                        <div class="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{{ $staleVariantReasons[$variant->id] }}</div>
                     @endif
                     @if ($variant->platform === 'wordpress')
                         <div class="mt-5 rounded-lg border border-violet-200 bg-violet-50/40 p-4">

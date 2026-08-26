@@ -6,6 +6,7 @@ use App\Enums\TaskPipelineMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateTaskAutomationRequest;
 use App\Jobs\ProcessStandardContentProductionJob;
+use App\Models\ContentTopic;
 use App\Models\Task;
 use App\Models\TaskSchedule;
 use App\Models\WritingRule;
@@ -21,13 +22,14 @@ class TaskAutomationController extends Controller
     public function index(): View
     {
         $tasks = Task::query()
-            ->select(['id', 'name', 'status', 'pipeline_mode', 'schedule_enabled', 'daily_production_limit', 'next_run_at', 'last_success_at', 'last_error_message'])
+            ->select(['id', 'name', 'content_topic_id', 'status', 'pipeline_mode', 'schedule_enabled', 'daily_production_limit', 'next_run_at', 'last_success_at', 'last_error_message'])
             ->withCount([
                 'taskSchedules',
                 'contentProductions',
                 'automationRuns as successful_runs_count' => fn ($query) => $query->where('status', 'completed'),
                 'automationRuns as failed_runs_count' => fn ($query) => $query->where('status', 'failed'),
             ])
+            ->with('contentTopic:id,name')
             ->withAvg(['automationRuns as average_duration_ms' => fn ($query) => $query->where('status', 'completed')], 'duration_ms')
             ->latest()
             ->paginate((int) config('geoflow.admin_items_per_page', 20));
@@ -42,11 +44,13 @@ class TaskAutomationController extends Controller
             'knowledgeBases:id,name',
             'knowledgeBase:id,name',
             'taskSchedules' => fn ($query) => $query->with('contentProduction:id,name')->latest('id')->limit(10),
+            'contentTopic:id,name,writing_rule_id',
         ]);
 
         return view('admin.content-productions.automation-edit', $this->viewData([
             'task' => $task,
             'writingRules' => WritingRule::query()->where('is_active', true)->with('versions:id,writing_rule_id,version')->orderBy('name')->get(),
+            'contentTopics' => ContentTopic::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'writing_rule_id']),
         ]));
     }
 
@@ -64,14 +68,22 @@ class TaskAutomationController extends Controller
             'pipeline_mode' => TaskPipelineMode::ContentProduction,
             'writing_rule_id' => $data['writing_rule_id'],
             'writing_rule_version_id' => $data['writing_rule_version_id'],
+            'content_topic_id' => data_get($data, 'content_topic_id') ?: null,
             'automation_timezone' => $data['automation_timezone'],
+            'production_time' => $data['production_time'],
             'daily_production_limit' => $data['daily_production_limit'],
             'max_production_concurrency' => $data['max_production_concurrency'],
             'production_failure_policy' => $data['production_failure_policy'],
-            'production_output_policy' => 'wordpress_draft',
+            'production_output_policy' => $data['production_output_policy'],
             'auto_publish_enabled' => false,
             'daily_token_budget' => $data['daily_token_budget'] ?? null,
-            'automation_settings' => ['topics' => $topics, 'target_platforms' => ['wordpress']],
+            'automation_settings' => [
+                'topics' => $topics,
+                'topic_source' => data_get($data, 'content_topic_id') ? 'content_topic' : 'independent_pool',
+                'target_platforms' => ['wordpress'],
+                'create_publishing_package_after_review' => (bool) ($data['create_publishing_package_after_review'] ?? false),
+                'platforms_after_review' => array_values($data['platforms_after_review'] ?? []),
+            ],
             'schedule_enabled' => 1,
             'next_run_at' => now(),
             'last_error_message' => null,
@@ -142,6 +154,6 @@ class TaskAutomationController extends Controller
 
     private function viewData(array $data): array
     {
-        return array_merge(['pageTitle' => '每日内容生产', 'activeMenu' => 'articles', 'adminSiteName' => AdminWeb::siteName()], $data);
+        return array_merge(['pageTitle' => '生产计划', 'activeMenu' => 'articles', 'adminSiteName' => AdminWeb::siteName()], $data);
     }
 }

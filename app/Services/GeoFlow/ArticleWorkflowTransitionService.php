@@ -11,6 +11,7 @@ class ArticleWorkflowTransitionService
     public function __construct(
         private readonly ArticleRiskGate $articleRiskGate,
         private readonly PublicationQualityGate $publicationQualityGate,
+        private readonly ContentPublishingPackagePreparationService $contentPublishingPackagePreparationService,
     ) {}
 
     /**
@@ -83,6 +84,8 @@ class ArticleWorkflowTransitionService
         if ($result instanceof ArticleRiskGateException) {
             throw $result;
         }
+
+        $this->contentPublishingPackagePreparationService->prepareAfterApproval($result);
 
         return $result;
     }

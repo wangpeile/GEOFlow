@@ -13,6 +13,14 @@
             </a>
         </div>
 
+        <section class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            @foreach ([['待生成', $packageCounts->pending_count ?? 0, 'bg-slate-50 text-slate-700'], ['待审核', $packageCounts->review_count ?? 0, 'bg-amber-50 text-amber-800'], ['已发布', $packageCounts->published_count ?? 0, 'bg-emerald-50 text-emerald-800'], ['失败', $packageCounts->failed_count ?? 0, 'bg-red-50 text-red-800']] as [$label, $count, $class])
+                <div class="rounded-lg p-4 {{ $class }}"><div class="text-xs font-semibold">{{ $label }}</div><div class="mt-1 text-2xl font-bold">{{ $count }}</div></div>
+            @endforeach
+        </section>
+
+        <form method="GET" class="mb-6 flex gap-3"><input name="q" value="{{ $query }}" class="w-full rounded-md border-gray-300 text-sm" placeholder="搜索发布包或主文章标题"><button class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700">搜索</button></form>
+
         <section class="mb-6 rounded-lg border border-blue-100 bg-blue-50/60 p-5">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>

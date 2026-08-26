@@ -47,4 +47,26 @@ class ContentGroupService
             return $contentGroup->load(['mainArticle', 'task', 'variants']);
         });
     }
+
+    /** @return array<int, string> Variant id => stale reason. */
+    public function staleVariantReasons(ContentGroup $contentGroup): array
+    {
+        $article = $contentGroup->mainArticle;
+        if (! $article) {
+            return [];
+        }
+
+        $sourceHash = hash('sha256', implode("\n", array_filter([
+            (string) $article->title,
+            (string) $article->excerpt,
+            (string) $article->content,
+        ])));
+
+        return $contentGroup->variants
+            ->filter(fn (ContentVariant $variant) => $variant->platform !== 'wordpress'
+                && filled($variant->source_content_hash)
+                && $variant->source_content_hash !== $sourceHash)
+            ->mapWithKeys(fn (ContentVariant $variant) => [$variant->id => '主文章已更新；平台稿仍保留人工修改，需人工决定是否重新生成。'])
+            ->all();
+    }
 }

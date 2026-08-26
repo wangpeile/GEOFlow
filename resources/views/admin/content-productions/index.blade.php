@@ -10,6 +10,7 @@
                     <p class="mt-3 text-sm leading-6 text-gray-600">一张文章工作单对应一篇主文章；完成后再建立发布包，为 WordPress 与各内容平台生成适配版本。</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
+                    <a href="{{ route('admin.content-topics.index') }}" class="inline-flex items-center justify-center rounded-md border border-teal-300 bg-white px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"><i data-lucide="folder-kanban" class="mr-2 h-4 w-4"></i>内容专题</a>
                     <a href="{{ route('admin.content-groups.index') }}" class="inline-flex items-center justify-center rounded-md border border-violet-300 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50"><i data-lucide="layers-3" class="mr-2 h-4 w-4"></i>发布包</a>
                     <a href="{{ route('admin.content-automations.index') }}" class="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"><i data-lucide="calendar-clock" class="mr-2 h-4 w-4"></i>生产计划</a>
                     <a href="{{ route('admin.content-productions.create') }}" class="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><i data-lucide="plus" class="mr-2 h-4 w-4"></i>新建文章</a>

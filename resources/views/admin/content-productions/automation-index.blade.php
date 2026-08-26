@@ -4,8 +4,8 @@
     <div class="flex flex-col gap-6 px-4 sm:px-0">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900">每日内容生产</h1>
-                <p class="mt-1 text-sm text-gray-600">为现有任务配置选题、写作规则和每日数量。生成结果默认保存为 WordPress 草稿，并等待人工审核。</p>
+                <h1 class="text-2xl font-bold text-gray-900">生产计划</h1>
+                <p class="mt-1 text-sm text-gray-600">生产计划每天按时创建一张文章工作单；可以绑定内容专题，也可以使用本计划的独立选题池。默认只保存为 WordPress 草稿。</p>
             </div>
             <a href="{{ route('admin.content-productions.index') }}" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">返回内容生产</a>
         </div>
@@ -23,7 +23,7 @@
                     <tbody class="divide-y divide-gray-100">
                     @forelse($tasks as $task)
                         <tr>
-                            <td class="px-6 py-4"><div class="font-semibold text-gray-900">{{ $task->name }}</div><div class="mt-1 text-xs text-gray-500">每日 {{ $task->daily_production_limit ?: 1 }} 篇 · 已创建 {{ $task->content_productions_count }} 个项目</div></td>
+                            <td class="px-6 py-4"><div class="font-semibold text-gray-900">{{ $task->name }}</div><div class="mt-1 text-xs text-gray-500">{{ $task->contentTopic?->name ?: '独立选题池' }} · 每日 {{ $task->daily_production_limit ?: 1 }} 篇 · 已创建 {{ $task->content_productions_count }} 张工作单</div></td>
                             <td class="px-6 py-4 text-sm text-gray-600">{{ $task->pipeline_mode?->value ?: 'legacy' }} · {{ $task->schedule_enabled ? '运行中' : '已暂停' }}</td>
                             @php
                                 $finishedRuns = $task->successful_runs_count + $task->failed_runs_count;

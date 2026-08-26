@@ -8,6 +8,9 @@ use App\Models\Author;
 use App\Models\Category;
 use App\Models\ContentGroup;
 use App\Models\ContentVariant;
+use App\Models\Task;
+use App\Services\GeoFlow\ArticleWorkflowTransitionService;
+use App\Support\GeoFlow\ArticleWorkflow;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -81,6 +84,31 @@ class AdminContentGroupsTest extends TestCase
         foreach (config('content_platforms') as $platform) {
             $response->assertSee($platform['label']);
         }
+    }
+
+    public function test_approved_article_from_opted_in_production_plan_prepares_a_publishing_package(): void
+    {
+        $task = Task::query()->create([
+            'name' => '发布包生产计划',
+            'pipeline_mode' => 'content_production',
+            'automation_settings' => ['create_publishing_package_after_review' => true],
+        ]);
+        $article = $this->article('审核后建立发布包')->forceFill([
+            'task_id' => $task->id,
+            'review_status' => 'pending',
+        ]);
+        $article->save();
+
+        app(ArticleWorkflowTransitionService::class)->transition(
+            $article,
+            ArticleWorkflow::normalizeState('draft', 'approved'),
+            'test_approval',
+        );
+
+        $this->assertDatabaseHas('content_groups', ['main_article_id' => $article->id]);
+        $this->assertSame(8, ContentVariant::query()
+            ->where('content_group_id', ContentGroup::query()->where('main_article_id', $article->id)->value('id'))
+            ->count());
     }
 
     private function admin(string $username = 'content_group_admin', string $role = 'admin'): Admin

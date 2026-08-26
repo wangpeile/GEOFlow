@@ -7,6 +7,8 @@ use App\Enums\TaskScheduleStatus;
 use App\Jobs\ProcessStandardContentProductionJob;
 use App\Models\Admin;
 use App\Models\ContentAutomationRun;
+use App\Models\ContentTopic;
+use App\Models\ContentTopicIdea;
 use App\Models\Task;
 use App\Models\TaskSchedule;
 use App\Models\WritingRule;
@@ -74,6 +76,34 @@ class ContentProductionAutomationTest extends TestCase
         $this->post(route('admin.content-automations.fallback', $task))->assertRedirect();
         $this->assertSame(TaskPipelineMode::Legacy, $task->fresh()->pipeline_mode);
         $this->assertSame(0, (int) $task->fresh()->schedule_enabled);
+    }
+
+    public function test_production_plan_consumes_one_topic_idea_and_records_its_snapshot_reference(): void
+    {
+        Queue::fake();
+        [$admin, $rule, $version] = $this->writingRule();
+        $clock = Carbon::parse('2026-08-18 09:00:00', 'Asia/Shanghai')->utc();
+        $topic = ContentTopic::query()->create([
+            'created_by_admin_id' => $admin->id,
+            'writing_rule_id' => $rule->id,
+            'name' => '企业视频会议内容专题',
+            'is_active' => true,
+        ]);
+        $idea = ContentTopicIdea::query()->create([
+            'content_topic_id' => $topic->id,
+            'topic' => '企业视频会议如何选择',
+            'status' => 'candidate',
+        ]);
+        $task = $this->task($admin, $rule, $version, $clock);
+        $task->update(['content_topic_id' => $topic->id, 'production_time' => '09:30']);
+
+        $schedule = app(ContentProductionScheduleService::class)->createOccurrence($task->id, $clock);
+
+        $this->assertNotNull($schedule);
+        $this->assertSame($idea->topic, $schedule->topic);
+        $this->assertSame($idea->id, (int) data_get($schedule->metadata, 'content_topic_idea_id'));
+        $this->assertSame($topic->id, (int) data_get($schedule->metadata, 'content_topic_id'));
+        $this->assertSame('scheduled', $idea->fresh()->status);
     }
 
     public function test_normal_admin_cannot_manage_content_automation(): void

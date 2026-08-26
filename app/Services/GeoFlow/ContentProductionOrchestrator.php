@@ -8,6 +8,8 @@ use App\Enums\ContentStageStatus;
 use App\Models\Admin;
 use App\Models\ContentProduction;
 use App\Models\ContentStageRun;
+use App\Models\ContentTopic;
+use App\Models\ContentTopicIdea;
 use App\Models\WritingRule;
 use App\Models\WritingRuleVersion;
 use App\Support\GeoFlow\ContentProduction\ContentProductionWorkflow;
@@ -24,7 +26,7 @@ final class ContentProductionOrchestrator
     ) {}
 
     /**
-     * @param  array{name: string, topic: string, mode: string, language: string, target_platforms?: list<string>, writing_rule_id?: int|null, writing_rule_version_id?: int|null, task_id?: int|null, idempotency_key?: string|null, context?:array<string,mixed>}  $attributes
+     * @param  array{name: string, topic: string, mode: string, language: string, target_platforms?: list<string>, writing_rule_id?: int|null, writing_rule_version_id?: int|null, content_topic_id?: int|null, content_topic_idea_id?: int|null, task_id?: int|null, idempotency_key?: string|null, context?:array<string,mixed>}  $attributes
      */
     public function create(Admin $admin, array $attributes): ContentProduction
     {
@@ -42,12 +44,26 @@ final class ContentProductionOrchestrator
                 }
             }
 
+            $contentTopic = isset($attributes['content_topic_id'])
+                ? ContentTopic::query()->lockForUpdate()->findOrFail($attributes['content_topic_id'])
+                : null;
+            $idea = isset($attributes['content_topic_idea_id'])
+                ? ContentTopicIdea::query()->lockForUpdate()->findOrFail($attributes['content_topic_idea_id'])
+                : null;
+
+            if ($idea && (! $contentTopic || $idea->content_topic_id !== $contentTopic->id)) {
+                throw ValidationException::withMessages(['content_topic_idea_id' => '选题不属于所选内容专题。']);
+            }
+
             $rule = isset($attributes['writing_rule_id'])
                 ? WritingRule::query()->findOrFail($attributes['writing_rule_id'])
-                : null;
+                : $contentTopic?->writingRule;
             $specifiedVersion = isset($attributes['writing_rule_version_id'])
                 ? WritingRuleVersion::query()->findOrFail($attributes['writing_rule_version_id'])
                 : null;
+            if ($specifiedVersion && $rule && $specifiedVersion->writing_rule_id !== $rule->id) {
+                throw ValidationException::withMessages(['writing_rule_version_id' => '写作规则版本不属于所选规则。']);
+            }
             $ruleSnapshot = $rule
                 ? ($specifiedVersion
                     ? $this->writingRules->snapshotVersion($rule, $specifiedVersion)
@@ -59,6 +75,8 @@ final class ContentProductionOrchestrator
                 'idempotency_key' => $idempotencyKey,
                 'created_by_admin_id' => $admin->getKey(),
                 'task_id' => $attributes['task_id'] ?? null,
+                'content_topic_id' => $contentTopic?->id,
+                'content_topic_idea_id' => $idea?->id,
                 'name' => $attributes['name'],
                 'topic' => $attributes['topic'],
                 'mode' => ContentProductionMode::from($attributes['mode']),
@@ -72,6 +90,17 @@ final class ContentProductionOrchestrator
                     'writing_rule' => $ruleSnapshot,
                     'category_id' => $attributes['category_id'] ?? null,
                     'author_id' => $attributes['author_id'] ?? null,
+                    'content_topic_snapshot' => $contentTopic ? [
+                        'id' => $contentTopic->id,
+                        'name' => $contentTopic->name,
+                        'website' => $contentTopic->website,
+                        'audience' => $contentTopic->audience,
+                        'knowledge_base_ids' => $contentTopic->knowledge_base_ids,
+                        'reference_urls' => $contentTopic->reference_urls,
+                        'material_scope' => $contentTopic->material_scope,
+                        'keyword_clusters' => $contentTopic->keyword_clusters,
+                        'content_goal' => $contentTopic->content_goal,
+                    ] : null,
                 ], $attributes['context'] ?? []),
             ];
 
@@ -84,6 +113,10 @@ final class ContentProductionOrchestrator
             }
 
             $production = ContentProduction::query()->create($productionAttributes);
+
+            if ($idea && $idea->status === 'candidate') {
+                $idea->update(['status' => 'scheduled']);
+            }
 
             foreach ($this->workflow->definitions() as $sequence => $definition) {
                 $production->stageRuns()->create([

@@ -22,6 +22,19 @@
                 <input name="name" maxlength="255" value="{{ old('name') }}" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="仅用于内部识别；留空时使用主题作为名称">
             </label>
 
+            <fieldset class="rounded-lg border border-violet-200 bg-violet-50/50 p-4">
+                <legend class="px-1 text-sm font-semibold text-violet-900">内容专题（可选）</legend>
+                <p class="mt-1 text-xs leading-5 text-violet-700">临时单篇文章无需选择专题；选择后仅复制专题当前资料与规则作为本工作单的快照。</p>
+                <div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <label class="flex flex-col gap-2"><span class="text-sm font-medium text-gray-700">所属专题</span><select name="content_topic_id" class="rounded-md border-gray-300 text-sm"><option value="">不属于专题</option>@foreach ($contentTopics as $contentTopic)<option value="{{ $contentTopic->id }}" @selected((string) old('content_topic_id', $selectedTopic?->id) === (string) $contentTopic->id)>{{ $contentTopic->name }}</option>@endforeach</select></label>
+                    @if ($selectedIdea)
+                        <input type="hidden" name="content_topic_idea_id" value="{{ $selectedIdea->id }}">
+                        <div class="flex flex-col gap-2"><span class="text-sm font-medium text-gray-700">使用选题池条目</span><div class="rounded-md border border-violet-200 bg-white px-3 py-2 text-sm text-gray-800">{{ $selectedIdea->topic }}</div></div>
+                    @endif
+                </div>
+                <div class="mt-3"><a href="{{ route('admin.content-topics.create') }}" class="text-xs font-semibold text-violet-700 hover:text-violet-900">新建内容专题 →</a></div>
+            </fieldset>
+
             <label class="flex flex-col gap-2">
                 <span class="text-sm font-semibold text-gray-700">写作规则</span>
                 <select name="writing_rule_id" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">

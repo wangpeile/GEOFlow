@@ -26,6 +26,7 @@ use App\Http\Controllers\Admin\ContentGroupController;
 use App\Http\Controllers\Admin\ContentOperationsController;
 use App\Http\Controllers\Admin\ContentProductionController;
 use App\Http\Controllers\Admin\ContentResearchController;
+use App\Http\Controllers\Admin\ContentTopicController;
 use App\Http\Controllers\Admin\ContentVariantController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DistributionController;
@@ -295,6 +296,23 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                     ->middleware('admin.super')->name('article.quality.repair');
             });
 
+        // 兼容早期“内容项目”入口；新界面统一使用“文章工作单”。
+        Route::get('content-projects', fn () => redirect()->route('admin.content-productions.index'))->name('content-projects.index');
+
+        Route::prefix('content-topics')
+            ->name('content-topics.')
+            ->middleware(['admin.super', 'content.production.enabled'])
+            ->group(function () {
+                Route::get('/', [ContentTopicController::class, 'index'])->name('index');
+                Route::get('create', [ContentTopicController::class, 'create'])->name('create');
+                Route::post('/', [ContentTopicController::class, 'store'])->name('store');
+                Route::get('{contentTopic}', [ContentTopicController::class, 'show'])->name('show');
+                Route::get('{contentTopic}/edit', [ContentTopicController::class, 'edit'])->name('edit');
+                Route::put('{contentTopic}', [ContentTopicController::class, 'update'])->name('update');
+                Route::post('{contentTopic}/ideas', [ContentTopicController::class, 'storeIdea'])->name('ideas.store');
+                Route::put('{contentTopic}/ideas/{contentTopicIdea}', [ContentTopicController::class, 'updateIdea'])->name('ideas.update');
+            });
+
         Route::prefix('content-operations')->name('content-operations.')
             ->middleware(['admin.super', 'content.production.enabled'])
             ->group(function (): void {
@@ -315,6 +333,9 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                 Route::post('{task}/schedules/{taskSchedule}/retry', [TaskAutomationController::class, 'retry'])->name('retry');
                 Route::post('{task}/fallback', [TaskAutomationController::class, 'fallback'])->name('fallback');
             });
+
+        // 保持旧链接可用，同时让界面术语收敛为“生产计划”。
+        Route::get('daily-content-production', fn () => redirect()->route('admin.content-automations.index'))->name('daily-content-production.index');
 
         // 栏目管理（保持 geo_admin/categories 路径语义）
         Route::prefix('categories')->name('categories.')->group(function () {

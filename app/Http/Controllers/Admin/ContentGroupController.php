@@ -28,6 +28,7 @@ class ContentGroupController extends Controller
 
     public function index(): View
     {
+        $query = trim((string) request('q'));
         $contentGroups = ContentGroup::query()
             ->select(['id', 'main_article_id', 'task_id', 'name', 'status', 'created_at', 'updated_at'])
             ->with([
@@ -39,14 +40,25 @@ class ContentGroupController extends Controller
                 'variants as ready_variants_count' => fn ($query) => $query->where('status', 'ready'),
                 'variants as published_variants_count' => fn ($query) => $query->where('status', 'published'),
             ])
+            ->when($query !== '', fn ($builder) => $builder->where('name', 'like', '%'.$query.'%'))
             ->latest()
-            ->paginate((int) config('geoflow.admin_items_per_page', 20));
+            ->paginate((int) config('geoflow.admin_items_per_page', 20))
+            ->withQueryString();
+
+        $packageCounts = ContentVariant::query()
+            ->selectRaw('sum(case when status = ? then 1 else 0 end) as pending_count', [ContentVariant::STATUS_PENDING])
+            ->selectRaw('sum(case when status = ? then 1 else 0 end) as review_count', [ContentVariant::STATUS_REVIEW_PENDING])
+            ->selectRaw('sum(case when status = ? then 1 else 0 end) as published_count', [ContentVariant::STATUS_PUBLISHED])
+            ->selectRaw('sum(case when status = ? then 1 else 0 end) as failed_count', [ContentVariant::STATUS_FAILED])
+            ->first();
 
         return view('admin.content-groups.index', [
             'pageTitle' => __('admin.content_groups.page_title'),
             'activeMenu' => 'content_production',
             'adminSiteName' => AdminWeb::siteName(),
             'contentGroups' => $contentGroups,
+            'packageCounts' => $packageCounts,
+            'query' => $query,
             'availableArticles' => Article::query()
                 ->select(['id', 'title', 'created_at'])
                 ->whereDoesntHave('contentGroup')
@@ -96,12 +108,14 @@ class ContentGroupController extends Controller
                 'id', 'content_variant_id', 'content_variant_version_id', 'reviewer_id', 'decision', 'note', 'created_at',
             ])->with('reviewer:id,username')->latest('id'),
         ]);
+        $staleVariantReasons = $this->contentGroupService->staleVariantReasons($contentGroup);
 
         return view('admin.content-groups.show', [
             'pageTitle' => __('admin.content_groups.detail_title'),
             'activeMenu' => 'content_production',
             'adminSiteName' => AdminWeb::siteName(),
             'contentGroup' => $contentGroup,
+            'staleVariantReasons' => $staleVariantReasons,
             'platforms' => $this->platformCatalog->all(),
             'wordpressChannels' => DistributionChannel::query()
                 ->select(['id', 'name', 'domain'])

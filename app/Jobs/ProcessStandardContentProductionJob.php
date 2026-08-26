@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\TaskScheduleStatus;
 use App\Models\ContentAutomationRun;
+use App\Models\ContentTopicIdea;
 use App\Models\TaskSchedule;
 use App\Services\GeoFlow\StandardContentProductionRunner;
 use Illuminate\Bus\Queueable;
@@ -87,6 +88,9 @@ class ProcessStandardContentProductionJob implements ShouldBeUnique, ShouldQueue
                     'updated_at' => now(),
                 ]);
                 $schedule->task()->update(['last_success_at' => now(), 'last_error_message' => null]);
+                if ($production->content_topic_idea_id) {
+                    ContentTopicIdea::query()->whereKey($production->content_topic_idea_id)->update(['status' => 'generating']);
+                }
             });
         } catch (Throwable $exception) {
             $this->markFailed($exception, (int) ((hrtime(true) - $started) / 1_000_000));
@@ -117,6 +121,10 @@ class ProcessStandardContentProductionJob implements ShouldBeUnique, ShouldQueue
             $updates = ['last_error_at' => now(), 'last_error_message' => $message];
             if ($schedule->task->production_failure_policy === 'pause') {
                 $updates['schedule_enabled'] = 0;
+            }
+            $ideaId = data_get($schedule->metadata, 'content_topic_idea_id');
+            if ($ideaId) {
+                ContentTopicIdea::query()->whereKey($ideaId)->where('status', 'generating')->update(['status' => 'needs_update']);
             }
             $schedule->task()->update($updates);
         });

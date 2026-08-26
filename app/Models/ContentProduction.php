@@ -19,6 +19,8 @@ class ContentProduction extends Model
         'uuid',
         'idempotency_key',
         'task_id',
+        'content_topic_id',
+        'content_topic_idea_id',
         'article_id',
         'created_by_admin_id',
         'writing_rule_id',
@@ -43,6 +45,8 @@ class ContentProduction extends Model
     {
         return [
             'task_id' => 'integer',
+            'content_topic_id' => 'integer',
+            'content_topic_idea_id' => 'integer',
             'article_id' => 'integer',
             'created_by_admin_id' => 'integer',
             'writing_rule_id' => 'integer',
@@ -63,6 +67,16 @@ class ContentProduction extends Model
     public function task(): BelongsTo
     {
         return $this->belongsTo(Task::class);
+    }
+
+    public function contentTopic(): BelongsTo
+    {
+        return $this->belongsTo(ContentTopic::class);
+    }
+
+    public function contentTopicIdea(): BelongsTo
+    {
+        return $this->belongsTo(ContentTopicIdea::class);
     }
 
     public function article(): BelongsTo

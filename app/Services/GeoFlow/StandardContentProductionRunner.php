@@ -6,6 +6,7 @@ use App\Enums\ContentDirectionKind;
 use App\Enums\ContentProductionMode;
 use App\Models\ContentDirectionVersion;
 use App\Models\ContentProduction;
+use App\Models\ContentTopicIdea;
 use App\Models\TaskSchedule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -39,13 +40,18 @@ final class StandardContentProductionRunner
             'target_platforms' => data_get($task->automation_settings, 'target_platforms', ['wordpress']),
             'writing_rule_id' => $task->writing_rule_id,
             'writing_rule_version_id' => $task->writing_rule_version_id,
+            'content_topic_id' => data_get($schedule->metadata, 'content_topic_id'),
+            'content_topic_idea_id' => data_get($schedule->metadata, 'content_topic_idea_id'),
             'idempotency_key' => hash('sha256', 'task-schedule:'.$schedule->id.':'.$schedule->topic_hash),
             'context' => [
-                'automation' => ['task_schedule_id' => $schedule->id, 'output_policy' => 'wordpress_draft'],
+                'automation' => ['task_schedule_id' => $schedule->id, 'output_policy' => $task->production_output_policy, 'production_plan_id' => $task->id],
             ],
         ]);
 
         $this->linkProduction($schedule, $production);
+        if ($production->content_topic_idea_id) {
+            ContentTopicIdea::query()->whereKey($production->content_topic_idea_id)->update(['status' => 'generating']);
+        }
 
         $knowledgeBase = $task->knowledgeBases->first() ?? $task->knowledgeBase;
         if (! $knowledgeBase) {

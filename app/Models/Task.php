@@ -62,7 +62,9 @@ class Task extends Model
         'pipeline_mode',
         'writing_rule_id',
         'writing_rule_version_id',
+        'content_topic_id',
         'automation_timezone',
+        'production_time',
         'daily_production_limit',
         'max_production_concurrency',
         'production_failure_policy',
@@ -106,6 +108,7 @@ class Task extends Model
             'pipeline_mode' => TaskPipelineMode::class,
             'writing_rule_id' => 'integer',
             'writing_rule_version_id' => 'integer',
+            'content_topic_id' => 'integer',
             'daily_production_limit' => 'integer',
             'max_production_concurrency' => 'integer',
             'auto_publish_enabled' => 'boolean',
@@ -196,6 +199,11 @@ class Task extends Model
     public function writingRuleVersion(): BelongsTo
     {
         return $this->belongsTo(WritingRuleVersion::class);
+    }
+
+    public function contentTopic(): BelongsTo
+    {
+        return $this->belongsTo(ContentTopic::class);
     }
 
     public function automationRuns(): HasMany

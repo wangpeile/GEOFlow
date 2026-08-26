@@ -6,6 +6,7 @@ use App\Enums\TaskPipelineMode;
 use App\Enums\TaskScheduleStatus;
 use App\Jobs\ProcessStandardContentProductionJob;
 use App\Models\ContentAutomationRun;
+use App\Models\ContentTopicIdea;
 use App\Models\Task;
 use App\Models\TaskSchedule;
 use Illuminate\Support\Carbon;
@@ -88,18 +89,36 @@ final class ContentProductionScheduleService
                 return null;
             }
 
+            $idea = $this->claimTopicIdea($task, $clock);
             $topics = collect(data_get($task->automation_settings, 'topics', []))
                 ->map(fn (mixed $topic): string => Str::squish((string) $topic))
                 ->filter()
                 ->unique()
                 ->values();
-            if ($topics->isEmpty()) {
+            if (! $idea && $topics->isEmpty()) {
                 $task->forceFill([
                     'last_error_at' => $clock,
                     'last_error_message' => '标准自动模式没有可用选题。',
                 ])->save();
 
                 return null;
+            }
+
+            if ($idea) {
+                $schedule = TaskSchedule::query()->create([
+                    'task_id' => $task->id,
+                    'next_run_time' => $clock,
+                    'local_date' => $localDate,
+                    'slot' => $dailyCount + 1,
+                    'topic' => $idea->topic,
+                    'topic_hash' => hash('sha256', Str::lower($idea->topic)),
+                    'status' => TaskScheduleStatus::Pending,
+                    'metadata' => ['timezone' => $timezone, 'forced' => $force, 'content_topic_idea_id' => $idea->id, 'content_topic_id' => $task->content_topic_id],
+                ]);
+                $idea->update(['status' => 'scheduled', 'scheduled_for' => $clock]);
+                $this->advanceTask($task, $clock, $timezone, $dailyCount + 1 >= max(1, $task->daily_production_limit));
+
+                return $schedule;
             }
 
             $historicalCount = TaskSchedule::query()->whereBelongsTo($task)->whereNotNull('topic_hash')->count();
@@ -133,9 +152,25 @@ final class ContentProductionScheduleService
 
     private function advanceTask(Task $task, Carbon $clock, string $timezone, bool $nextDay): void
     {
+        $plannedTime = preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string) $task->production_time) ? $task->production_time : '00:05';
         $nextRunAt = $nextDay
-            ? $clock->copy()->timezone($timezone)->addDay()->startOfDay()->addMinutes(5)->utc()
+            ? $clock->copy()->timezone($timezone)->addDay()->setTimeFromTimeString($plannedTime)->utc()
             : $clock->copy()->addMinute();
         $task->forceFill(['next_run_at' => $nextRunAt, 'last_run_at' => $clock])->save();
+    }
+
+    private function claimTopicIdea(Task $task, Carbon $clock): ?ContentTopicIdea
+    {
+        if (! $task->content_topic_id) {
+            return null;
+        }
+
+        return ContentTopicIdea::query()
+            ->where('content_topic_id', $task->content_topic_id)
+            ->whereIn('status', ['candidate', 'needs_update'])
+            ->orderByRaw("case when status = 'candidate' then 0 else 1 end")
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first();
     }
 }

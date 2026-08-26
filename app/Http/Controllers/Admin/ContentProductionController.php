@@ -11,6 +11,8 @@ use App\Models\Author;
 use App\Models\Category;
 use App\Models\ContentProduction;
 use App\Models\ContentStageRun;
+use App\Models\ContentTopic;
+use App\Models\ContentTopicIdea;
 use App\Models\KnowledgeBase;
 use App\Models\UrlImportJob;
 use App\Models\WritingRule;
@@ -87,7 +89,7 @@ class ContentProductionController extends Controller
         ]));
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
         $this->ensureEnabled();
 
@@ -101,6 +103,9 @@ class ContentProductionController extends Controller
                 ->get(),
             'categories' => Category::query()->select(['id', 'name'])->orderBy('name')->get(),
             'authors' => Author::query()->select(['id', 'name'])->orderBy('name')->get(),
+            'contentTopics' => ContentTopic::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'category_id', 'writing_rule_id']),
+            'selectedTopic' => $request->integer('content_topic_id') ? ContentTopic::query()->find($request->integer('content_topic_id')) : null,
+            'selectedIdea' => $request->integer('content_topic_idea_id') ? ContentTopicIdea::query()->find($request->integer('content_topic_idea_id')) : null,
             'platformRequirements' => collect([
                 'wordpress' => 'wordpress',
                 'baijiahao' => 'baijiahao',
