@@ -1237,6 +1237,8 @@ class DistributionController extends Controller
             'wordpress_fixed_category' => ['nullable', 'string', 'max:120'],
             'wordpress_tag_strategy' => ['nullable', 'string', 'in:keywords_to_tags,disabled'],
             'wordpress_image_strategy' => ['nullable', 'string', 'in:upload_to_media,keep_original'],
+            'wordpress_profile' => ['nullable', 'string', 'in:standard,redwhale_v1'],
+            'wordpress_rank_math_enabled' => ['nullable', 'boolean'],
             'generic_auth_type' => ['nullable', 'string', 'in:none,bearer,basic,header_key,hmac'],
             'generic_basic_username' => ['nullable', 'string', 'max:120'],
             'generic_secret' => ['nullable', 'string', 'max:1000'],
@@ -1704,8 +1706,11 @@ class DistributionController extends Controller
             'wordpress_fixed_category' => '',
             'wordpress_tag_strategy' => 'keywords_to_tags',
             'wordpress_image_strategy' => 'upload_to_media',
+            'wordpress_profile' => 'standard',
+            'wordpress_rank_math_enabled' => false,
             'wordpress_content_format' => 'html',
         ];
+        $wordpressProfile = (string) ($payload['wordpress_profile'] ?? $defaults['wordpress_profile']);
 
         return $this->withExistingFrontendCapabilitiesCache([
             'article_text_ad_policy' => $articleTextAdPolicy,
@@ -1716,6 +1721,8 @@ class DistributionController extends Controller
             'wordpress_fixed_category' => trim((string) ($payload['wordpress_fixed_category'] ?? $defaults['wordpress_fixed_category'])),
             'wordpress_tag_strategy' => (string) ($payload['wordpress_tag_strategy'] ?? $defaults['wordpress_tag_strategy']),
             'wordpress_image_strategy' => (string) ($payload['wordpress_image_strategy'] ?? $defaults['wordpress_image_strategy']),
+            'wordpress_profile' => $wordpressProfile,
+            'wordpress_rank_math_enabled' => $wordpressProfile === 'redwhale_v1' || (bool) ($payload['wordpress_rank_math_enabled'] ?? $defaults['wordpress_rank_math_enabled']),
             'wordpress_content_format' => 'html',
         ], $channel);
     }

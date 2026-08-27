@@ -29,7 +29,7 @@ class WordPressTaxonomySyncService
             }
 
             $slug = $this->slug($fixedCategory);
-            $matchedId = $this->findTermId($channel, 'categories', $slug);
+            $matchedId = $this->findTermId($channel, 'categories', $fixedCategory, $slug);
 
             return $matchedId !== null ? [$matchedId] : array_values(array_filter([
                 $this->createTermId($channel, 'categories', $fixedCategory, $slug),
@@ -45,7 +45,7 @@ class WordPressTaxonomySyncService
 
         $slug = trim((string) ($category['slug'] ?? ''));
         $slug = $slug !== '' ? $this->slug($slug) : $this->slug($name);
-        $matchedId = $this->findTermId($channel, 'categories', $slug);
+        $matchedId = $this->findTermId($channel, 'categories', $name, $slug);
         if ($matchedId !== null) {
             return [$matchedId];
         }
@@ -81,7 +81,7 @@ class WordPressTaxonomySyncService
             }
 
             $slug = $this->slug($name);
-            $matchedId = $this->findTermId($channel, 'tags', $slug);
+            $matchedId = $this->findTermId($channel, 'tags', $name, $slug);
             $ids[] = $matchedId ?? $this->createTermId($channel, 'tags', $name, $slug);
         }
 
@@ -91,17 +91,36 @@ class WordPressTaxonomySyncService
         ))));
     }
 
-    private function findTermId(DistributionChannel $channel, string $taxonomy, string $slug): ?int
+    private function findTermId(DistributionChannel $channel, string $taxonomy, string $name, string $slug): ?int
     {
+        if ($channel->resolvedChannelConfig()['wordpress_profile'] !== 'redwhale_v1') {
+            return $this->findTermIdBySlug($channel, $taxonomy, $slug);
+        }
+
         $response = $this->requestFactory->request($channel)
-            ->get($channel->wordpressRestBaseUrl().'/wp/v2/'.$taxonomy, ['slug' => $slug]);
+            ->get($channel->wordpressRestBaseUrl().'/wp/v2/'.$taxonomy, ['search' => $name, 'per_page' => 100]);
         $this->throwIfFailed($response, 'WordPress 分类/标签查询');
         $json = $response->json();
         if (! is_array($json)) {
             return null;
         }
 
-        $first = $json[0] ?? null;
+        foreach ($json as $term) {
+            if (is_array($term) && trim((string) ($term['name'] ?? '')) === $name && is_numeric($term['id'] ?? null)) {
+                return (int) $term['id'];
+            }
+        }
+
+        return $this->findTermIdBySlug($channel, $taxonomy, $slug);
+    }
+
+    private function findTermIdBySlug(DistributionChannel $channel, string $taxonomy, string $slug): ?int
+    {
+        $response = $this->requestFactory->request($channel)
+            ->get($channel->wordpressRestBaseUrl().'/wp/v2/'.$taxonomy, ['slug' => $slug]);
+        $this->throwIfFailed($response, 'WordPress 分类/标签查询');
+        $json = $response->json();
+        $first = is_array($json) ? ($json[0] ?? null) : null;
 
         return is_array($first) && is_numeric($first['id'] ?? null) ? (int) $first['id'] : null;
     }

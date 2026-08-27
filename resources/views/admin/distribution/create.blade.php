@@ -92,6 +92,20 @@
                             <h2 class="text-lg font-medium text-gray-900">{{ __('admin.distribution.wordpress.section_title') }}</h2>
                             <p class="mt-1 text-sm leading-6 text-gray-600">{{ __('admin.distribution.wordpress.section_desc') }}</p>
                         </div>
+                        <div class="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+                            <div>
+                                <label for="wordpress_profile" class="block text-sm font-medium text-gray-700">接口配置方案</label>
+                                <select id="wordpress_profile" name="wordpress_profile" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <option value="standard" @selected(old('wordpress_profile', 'standard') === 'standard')>标准 WordPress REST</option>
+                                    <option value="redwhale_v1" @selected(old('wordpress_profile') === 'redwhale_v1')>红鲸官网 WordPress（增强）</option>
+                                </select>
+                                <p class="mt-1 text-xs text-gray-500">红鲸方案使用文章编辑权限检测、PUT 更新、Rank Math SEO 和特色图写入。</p>
+                            </div>
+                            <label class="mt-7 flex items-center gap-2 text-sm text-gray-700">
+                                <input name="wordpress_rank_math_enabled" type="checkbox" value="1" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" @checked(old('wordpress_rank_math_enabled'))>
+                                启用 Rank Math SEO 写入（红鲸方案自动启用）
+                            </label>
+                        </div>
                         <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <div>
                                 <label for="wordpress_username" class="block text-sm font-medium text-gray-700">{{ __('admin.distribution.wordpress.username') }}</label>

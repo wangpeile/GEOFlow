@@ -20,6 +20,10 @@ class WordPressRestPublisher implements DistributionPublisherInterface
         $indexResponse = $this->requestFactory->request($channel, 10)->get($channel->wordpressRestBaseUrl());
         $this->throwIfFailed($indexResponse, 'WordPress REST 入口检测');
 
+        if ($channel->resolvedChannelConfig()['wordpress_health_strategy'] === 'posts_context_edit') {
+            return $this->postsContextEditHealth($channel);
+        }
+
         $response = $this->requestFactory->request($channel, 10)
             ->get($channel->wordpressRestBaseUrl().'/wp/v2/users/me', ['context' => 'edit']);
         $this->throwIfFailed($response, 'WordPress 健康检查');
@@ -55,7 +59,7 @@ class WordPressRestPublisher implements DistributionPublisherInterface
             ->post($channel->wordpressRestBaseUrl().'/wp/v2/posts', $this->postPayload($channel, $payload));
         $this->throwIfFailed($response, 'WordPress 文章发布');
 
-        return $this->postResult($response);
+        return $this->postResult($channel, $response, $payload);
     }
 
     public function update(ArticleDistribution $distribution, array $payload): array
@@ -67,11 +71,14 @@ class WordPressRestPublisher implements DistributionPublisherInterface
             return $this->publish($distribution, $payload);
         }
 
-        $response = $this->requestFactory->request($channel)
-            ->post($channel->wordpressRestBaseUrl().'/wp/v2/posts/'.$postId, $this->postPayload($channel, $payload));
+        $request = $this->requestFactory->request($channel);
+        $endpoint = $channel->wordpressRestBaseUrl().'/wp/v2/posts/'.$postId;
+        $response = $channel->resolvedChannelConfig()['wordpress_update_method'] === 'put'
+            ? $request->put($endpoint, $this->postPayload($channel, $payload))
+            : $request->post($endpoint, $this->postPayload($channel, $payload));
         $this->throwIfFailed($response, 'WordPress 文章更新');
 
-        return $this->postResult($response);
+        return $this->postResult($channel, $response, $payload);
     }
 
     public function delete(ArticleDistribution $distribution): array
@@ -101,6 +108,10 @@ class WordPressRestPublisher implements DistributionPublisherInterface
 
     public function syncSiteSettings(DistributionChannel $channel): array
     {
+        if (! $channel->resolvedChannelConfig()['wordpress_site_settings_sync_enabled']) {
+            throw new RuntimeException('当前 WordPress 渠道账号未授权站点设置同步。');
+        }
+
         $settings = $channel->resolvedSiteSettings();
         $payload = [
             'title' => $settings['site_name'],
@@ -154,6 +165,11 @@ class WordPressRestPublisher implements DistributionPublisherInterface
             $postPayload['tags'] = $tagIds;
         }
 
+        $featuredMediaId = $this->mediaSyncService->uploadHeroImage($channel, $payload);
+        if ($featuredMediaId !== null) {
+            $postPayload['featured_media'] = $featuredMediaId;
+        }
+
         return $postPayload;
     }
 
@@ -203,7 +219,7 @@ class WordPressRestPublisher implements DistributionPublisherInterface
     /**
      * @return array<string,mixed>
      */
-    private function postResult(Response $response): array
+    private function postResult(DistributionChannel $channel, Response $response, array $payload): array
     {
         $json = $response->json();
         if (! is_array($json)) {
@@ -215,12 +231,65 @@ class WordPressRestPublisher implements DistributionPublisherInterface
             throw new RuntimeException('WordPress 返回结果缺少有效文章 ID。');
         }
 
+        $this->syncRankMathMeta($channel, $postId, $payload);
+
         return [
             'remote_id' => (string) $postId,
             'remote_url' => (string) ($json['link'] ?? ''),
             'remote_meta' => [
                 'wordpress_post_id' => $postId,
             ],
+        ];
+    }
+
+    /** @param array<string,mixed> $payload */
+    private function syncRankMathMeta(DistributionChannel $channel, int $postId, array $payload): void
+    {
+        if (! $channel->resolvedChannelConfig()['wordpress_rank_math_enabled']) {
+            return;
+        }
+
+        $article = is_array($payload['article'] ?? null) ? $payload['article'] : [];
+        $title = trim((string) ($article['title'] ?? ''));
+        $description = trim((string) ($article['meta_description'] ?? $article['excerpt'] ?? ''));
+        $focusKeyword = trim((string) ($article['keywords'] ?? ''));
+        $fields = array_filter([
+            'rank_math_focus_keyword' => $focusKeyword,
+            'rank_math_title' => $title,
+            'rank_math_description' => $description,
+        ], static fn (string $value): bool => $value !== '');
+
+        foreach ($fields as $key => $value) {
+            $response = $this->requestFactory->request($channel)
+                ->post(rtrim($channel->wordpressRestBaseUrl(), '/').'/rankmath/v1/updateMeta', [
+                    'objectID' => $postId,
+                    'objectType' => 'post',
+                    'metaKey' => $key,
+                    'metaValue' => $value,
+                ]);
+            $this->throwIfFailed($response, 'Rank Math SEO 写入');
+        }
+    }
+
+    /** @return array<string,mixed> */
+    private function postsContextEditHealth(DistributionChannel $channel): array
+    {
+        $response = $this->requestFactory->request($channel, 10)
+            ->get($channel->wordpressRestBaseUrl().'/wp/v2/posts', [
+                'context' => 'edit',
+                'status' => 'draft',
+                'per_page' => 1,
+            ]);
+        $this->throwIfFailed($response, 'WordPress 文章编辑权限检测');
+
+        return [
+            'ok' => true,
+            'channel_type' => 'wordpress_rest',
+            'rest_base_url' => $channel->wordpressRestBaseUrl(),
+            'health_strategy' => 'posts_context_edit',
+            'can_edit_posts' => true,
+            'can_publish_posts' => null,
+            'can_upload_files' => null,
         ];
     }
 }

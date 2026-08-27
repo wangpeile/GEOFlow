@@ -445,7 +445,12 @@ class DistributionChannel extends Model
      *   wordpress_fixed_category:string,
      *   wordpress_tag_strategy:string,
      *   wordpress_image_strategy:string,
-     *   wordpress_content_format:string
+     *   wordpress_content_format:string,
+     *   wordpress_profile:string,
+     *   wordpress_health_strategy:string,
+     *   wordpress_update_method:string,
+     *   wordpress_rank_math_enabled:bool,
+     *   wordpress_site_settings_sync_enabled:bool
      * }
      */
     public function resolvedChannelConfig(): array
@@ -455,6 +460,10 @@ class DistributionChannel extends Model
         $categoryStrategy = (string) ($stored['wordpress_category_strategy'] ?? 'match_or_create');
         $tagStrategy = (string) ($stored['wordpress_tag_strategy'] ?? 'keywords_to_tags');
         $imageStrategy = (string) ($stored['wordpress_image_strategy'] ?? 'upload_to_media');
+        $profile = (string) ($stored['wordpress_profile'] ?? 'standard');
+        $isRedwhale = $profile === 'redwhale_v1';
+        $healthStrategy = (string) ($stored['wordpress_health_strategy'] ?? ($isRedwhale ? 'posts_context_edit' : 'users_me'));
+        $updateMethod = (string) ($stored['wordpress_update_method'] ?? ($isRedwhale ? 'put' : 'post'));
 
         return [
             'wordpress_username' => trim((string) ($stored['wordpress_username'] ?? '')),
@@ -464,6 +473,11 @@ class DistributionChannel extends Model
             'wordpress_tag_strategy' => in_array($tagStrategy, ['keywords_to_tags', 'disabled'], true) ? $tagStrategy : 'keywords_to_tags',
             'wordpress_image_strategy' => in_array($imageStrategy, ['upload_to_media', 'keep_original'], true) ? $imageStrategy : 'upload_to_media',
             'wordpress_content_format' => 'html',
+            'wordpress_profile' => in_array($profile, ['standard', 'redwhale_v1'], true) ? $profile : 'standard',
+            'wordpress_health_strategy' => in_array($healthStrategy, ['users_me', 'posts_context_edit'], true) ? $healthStrategy : 'users_me',
+            'wordpress_update_method' => in_array($updateMethod, ['post', 'put'], true) ? $updateMethod : 'post',
+            'wordpress_rank_math_enabled' => (bool) ($stored['wordpress_rank_math_enabled'] ?? $isRedwhale),
+            'wordpress_site_settings_sync_enabled' => (bool) ($stored['wordpress_site_settings_sync_enabled'] ?? ! $isRedwhale),
         ];
     }
 

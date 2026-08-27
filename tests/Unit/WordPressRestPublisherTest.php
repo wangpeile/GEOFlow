@@ -120,6 +120,75 @@ class WordPressRestPublisherTest extends TestCase
         $this->assertTrue($result['can_edit_posts']);
     }
 
+    public function test_redwhale_profile_health_uses_posts_context_edit_instead_of_users_endpoint(): void
+    {
+        Http::fake([
+            'https://wp.example.com/wp-json' => Http::response(['name' => 'WordPress']),
+            'https://wp.example.com/wp-json/wp/v2/posts*' => Http::response([]),
+        ]);
+        [$channel] = $this->makeDistribution();
+        $channel->forceFill(['channel_config' => array_merge($channel->channel_config, [
+            'wordpress_profile' => 'redwhale_v1',
+        ])])->save();
+
+        $result = app(WordPressRestPublisher::class)->health($channel->fresh());
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('posts_context_edit', $result['health_strategy']);
+        Http::assertSent(fn ($request): bool => $request->method() === 'GET'
+            && str_starts_with($request->url(), 'https://wp.example.com/wp-json/wp/v2/posts?')
+            && $request->data()['context'] === 'edit');
+        Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/users/me'));
+    }
+
+    public function test_redwhale_profile_uploads_featured_media_updates_by_put_and_writes_rank_math(): void
+    {
+        Http::fake(function ($request) {
+            if ($request->url() === 'https://wp.example.com/wp-json/wp/v2/media') {
+                return Http::response(['id' => 88, 'source_url' => 'https://wp.example.com/uploads/cover.jpg'], 201);
+            }
+            if ($request->url() === 'https://wp.example.com/wp-json/wp/v2/posts/123') {
+                return Http::response(['id' => 123, 'link' => 'https://wp.example.com/post/']);
+            }
+            if ($request->url() === 'https://wp.example.com/wp-json/rankmath/v1/updateMeta') {
+                return Http::response(['success' => true]);
+            }
+
+            return Http::response([], 404);
+        });
+        [$channel, $distribution] = $this->makeDistribution(['remote_id' => '123']);
+        $channel->forceFill(['channel_config' => array_merge($channel->channel_config, [
+            'wordpress_profile' => 'redwhale_v1',
+            'wordpress_image_strategy' => 'upload_to_media',
+        ])])->save();
+
+        app(WordPressRestPublisher::class)->update($distribution, [
+            'article' => [
+                'title' => '红鲸文章标题',
+                'slug' => 'redwhale-article',
+                'excerpt' => '文章摘要',
+                'content_html' => '<p>正文</p>',
+                'keywords' => '视频会议, 企业通讯',
+                'meta_description' => 'SEO 描述',
+                'hero_image_url' => '/storage/uploads/cover.jpg',
+            ],
+            'assets' => ['images' => [[
+                'source_url' => '/storage/uploads/cover.jpg',
+                'filename' => 'cover.jpg',
+                'mime_type' => 'image/jpeg',
+                'content_base64' => base64_encode('image-binary'),
+            ]]],
+        ]);
+
+        Http::assertSent(fn ($request): bool => $request->method() === 'PUT'
+            && $request->url() === 'https://wp.example.com/wp-json/wp/v2/posts/123'
+            && $request['featured_media'] === 88);
+        Http::assertSentCount(5);
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://wp.example.com/wp-json/rankmath/v1/updateMeta'
+            && $request['metaKey'] === 'rank_math_focus_keyword'
+            && $request['metaValue'] === '视频会议, 企业通讯');
+    }
+
     public function test_it_syncs_supported_site_settings_to_wordpress_settings_endpoint(): void
     {
         Http::fake([

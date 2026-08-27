@@ -52,7 +52,9 @@
     ];
     $healthCheckUrl = rtrim((string) $channel->endpoint_url, '/').'/geoflow-agent/v1/health';
     if ($channel->isWordPressRest()) {
-        $healthCheckUrl = $channel->wordpressRestBaseUrl().'/wp/v2/users/me?context=edit';
+        $healthCheckUrl = $channelConfig['wordpress_health_strategy'] === 'posts_context_edit'
+            ? $channel->wordpressRestBaseUrl().'/wp/v2/posts?context=edit&status=draft&per_page=1'
+            : $channel->wordpressRestBaseUrl().'/wp/v2/users/me?context=edit';
     } elseif ($channel->isGenericHttpApi()) {
         $genericHealthPath = strtr((string) $genericConfig['generic_health_path'], ['{channel_id}' => (string) $channel->id]);
         $healthCheckUrl = rtrim((string) $channel->endpoint_url, '/').(str_starts_with($genericHealthPath, '/') ? $genericHealthPath : '/'.$genericHealthPath);
