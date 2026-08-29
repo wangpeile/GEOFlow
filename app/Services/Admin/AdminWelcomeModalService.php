@@ -4,6 +4,8 @@ namespace App\Services\Admin;
 
 use App\Models\Admin;
 use App\Support\AdminWeb;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
 
 /**
  * 后台「欢迎使用 GEOFlow」弹窗：负责版本态判断、自动打开一次、以及关闭落库所需的数据。
@@ -23,7 +25,6 @@ class AdminWelcomeModalService
     {
         $welcomeState = $this->resolveWelcomeState();
         $shouldAutoOpen = $this->prepareAutoOpen($admin, $welcomeState);
-        $admin->refresh();
 
         $copy = ($welcomeState['mode'] ?? 'intro') === 'update'
             ? $this->buildUpdateCopy($welcomeState)
@@ -90,6 +91,8 @@ class AdminWelcomeModalService
     /**
      * 当当前欢迎/更新版本键与库中已读不一致时：本请求应自动弹出，并写入 `welcome_seen_version` 以免重复打扰。
      *
+     * 这是一项体验优化，不能因为可选的已读标记写入失败而阻断整个后台页面。
+     *
      * @param  array<string, mixed>  $welcomeState
      */
     private function prepareAutoOpen(Admin $admin, array $welcomeState): bool
@@ -98,10 +101,20 @@ class AdminWelcomeModalService
         $seen = (string) ($admin->welcome_seen_version ?? '');
         $shouldAutoOpen = $seen !== $versionKey;
         if ($shouldAutoOpen) {
-            Admin::query()->whereKey($admin->id)->update([
-                'welcome_seen_version' => $versionKey,
-                'updated_at' => now(),
-            ]);
+            try {
+                Admin::query()->whereKey($admin->id)->update([
+                    'welcome_seen_version' => $versionKey,
+                    'updated_at' => now(),
+                ]);
+            } catch (QueryException $exception) {
+                Log::warning('Unable to persist the optional admin welcome state.', [
+                    'admin_id' => $admin->id,
+                    'welcome_version' => $versionKey,
+                    'exception' => $exception,
+                ]);
+
+                return false;
+            }
         }
 
         return $shouldAutoOpen;
