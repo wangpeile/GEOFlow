@@ -107,6 +107,30 @@ class ContentVariantWorkflowTest extends TestCase
             ->assertSessionHasErrors();
     }
 
+    public function test_platform_preview_and_publication_feedback_are_available_for_a_generated_variant(): void
+    {
+        [$admin, $group, $variant] = $this->generatedVariant('baijiahao');
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.content-groups.variants.preview', [$group, $variant]))
+            ->assertOk()
+            ->assertSee('发布就绪检查')
+            ->assertSee('一键复制发布稿');
+
+        $this->post(route('admin.content-groups.variants.feedback', [$group, $variant]), [
+            'outcome' => 'manual_adjusted',
+            'reasons' => "封面需要替换\n平台格式微调",
+            'manual_adjustments' => '补充封面图片',
+            'notes' => '已按平台编辑器提示处理。',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('content_platform_feedback', [
+            'content_variant_id' => $variant->id,
+            'admin_id' => $admin->id,
+            'outcome' => 'manual_adjusted',
+        ]);
+    }
+
     public function test_wordpress_draft_publication_is_versioned_and_idempotent(): void
     {
         Queue::fake();

@@ -20,10 +20,13 @@ use App\Http\Controllers\Admin\ArticleTypeController;
 use App\Http\Controllers\Admin\AuthorController;
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\ContentArticleController;
+use App\Http\Controllers\Admin\ContentAssetController;
+use App\Http\Controllers\Admin\ContentCenterController;
 use App\Http\Controllers\Admin\ContentDirectionController;
 use App\Http\Controllers\Admin\ContentEvidenceController;
 use App\Http\Controllers\Admin\ContentGroupController;
 use App\Http\Controllers\Admin\ContentOperationsController;
+use App\Http\Controllers\Admin\ContentPlatformSpecificationController;
 use App\Http\Controllers\Admin\ContentProductionController;
 use App\Http\Controllers\Admin\ContentResearchController;
 use App\Http\Controllers\Admin\ContentTopicController;
@@ -95,6 +98,11 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
         Route::post('welcome/dismiss', [AdminWelcomeController::class, 'dismiss'])->name('welcome.dismiss');
         Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
         Route::get('analytics', [AnalyticsController::class, 'index'])->name('analytics');
+
+        Route::get('content-assets', [ContentAssetController::class, 'index'])
+            ->middleware(['admin.super', 'content.production.enabled'])->name('content-assets.index');
+        Route::get('content-center', [ContentCenterController::class, 'index'])
+            ->middleware(['admin.super', 'content.production.enabled'])->name('content-center.index');
 
         Route::prefix('system-updates')->name('system-updates.')->group(function () {
             Route::get('/', [SystemUpdateController::class, 'index'])->name('index');
@@ -206,12 +214,24 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                 Route::get('{contentGroup}', [ContentGroupController::class, 'show'])->name('show');
                 Route::post('{contentGroup}/variants/generate', [ContentGroupController::class, 'generate'])->name('variants.generate');
                 Route::post('{contentGroup}/variants/export', [ContentVariantController::class, 'export'])->name('variants.export');
+                Route::get('{contentGroup}/variants/{contentVariant}/preview', [ContentVariantController::class, 'preview'])->name('variants.preview');
+                Route::post('{contentGroup}/variants/{contentVariant}/feedback', [ContentVariantController::class, 'feedback'])->name('variants.feedback');
                 Route::get('{contentGroup}/variants/{contentVariant}/edit', [ContentVariantController::class, 'edit'])->name('variants.edit');
                 Route::put('{contentGroup}/variants/{contentVariant}', [ContentVariantController::class, 'update'])->name('variants.update');
                 Route::post('{contentGroup}/variants/{contentVariant}/review', [ContentVariantController::class, 'review'])->name('variants.review');
                 Route::post('{contentGroup}/variants/{contentVariant}/regenerate', [ContentGroupController::class, 'regenerate'])->name('variants.regenerate');
                 Route::post('{contentGroup}/variants/{contentVariant}/wordpress-publications', [WordPressContentPublicationController::class, 'store'])->name('variants.wordpress.publish');
                 Route::post('{contentGroup}/variants/{contentVariant}/wordpress-publications/{articleDistribution}/retry', [WordPressContentPublicationController::class, 'retry'])->name('variants.wordpress.retry');
+            });
+
+        Route::get('distribution-center', [ContentGroupController::class, 'index'])
+            ->middleware(['admin.super', 'content.production.enabled'])->name('distribution-center.index');
+
+        Route::prefix('content-platform-specifications')->name('content-platform-specifications.')
+            ->middleware(['admin.super', 'content.production.enabled'])->group(function () {
+                Route::get('/', [ContentPlatformSpecificationController::class, 'index'])->name('index');
+                Route::get('{platform}/edit', [ContentPlatformSpecificationController::class, 'edit'])->name('edit');
+                Route::put('{platform}', [ContentPlatformSpecificationController::class, 'update'])->name('update');
             });
 
         Route::middleware(['admin.super', 'content.production.enabled'])->group(function () {
@@ -290,6 +310,8 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                     ->middleware('admin.super')->whereUuid('sectionKey')->name('article.sections.save');
                 Route::post('{contentProduction}/article/assemble', [ContentArticleController::class, 'assemble'])
                     ->middleware('admin.super')->name('article.assemble');
+                Route::post('{contentProduction}/article/promote', [ContentArticleController::class, 'promote'])
+                    ->middleware('admin.super')->name('article.promote');
                 Route::post('{contentProduction}/article/quality/inspect', [ContentArticleController::class, 'inspectQuality'])
                     ->middleware('admin.super')->name('article.quality.inspect');
                 Route::post('{contentProduction}/article/quality/{qualityReport}/repair', [ContentArticleController::class, 'repairQuality'])

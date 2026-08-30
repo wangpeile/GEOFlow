@@ -26,7 +26,7 @@
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
                 <h2 class="font-semibold text-gray-900">分段写作与文章组装</h2>
-                <p class="mt-1 text-sm leading-6 text-gray-500">每个章节独立保存版本；重写单个章节不会改动其他章节。组装完成后只同步为待审核草稿。</p>
+                <p class="mt-1 text-sm leading-6 text-gray-500">每个章节独立保存版本；重写单个章节不会改动其他章节。组装后先完成统一质量检查，合格后才固化为主文章。</p>
             </div>
             @if (auth('admin')->user()?->canManageProtectedWorkflows() && config('geoflow.content_production_pipeline_enabled', false))
                 <div class="flex flex-wrap gap-2">

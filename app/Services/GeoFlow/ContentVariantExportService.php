@@ -71,7 +71,15 @@ final class ContentVariantExportService
                 'tags' => $version->tags,
                 'image_requirements' => $version->image_requirements,
                 'reviewed_at' => $variant->reviewed_at?->toIso8601String(),
+                'platform_specification_version' => $variant->platform_specification_version,
+                'publication_readiness' => $variant->publication_readiness,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
+            if ($variant->publication_payload) {
+                $zip->addFromString($slug.'/publication-pack.json', json_encode(
+                    $variant->publication_payload,
+                    JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                ) ?: '{}');
+            }
             $manifest[] = ['platform' => $variant->platform, 'version' => $version->version, 'file' => $slug.'/article.md'];
         }
         $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]');

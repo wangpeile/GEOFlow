@@ -4,13 +4,16 @@
     <div class="px-4 sm:px-0">
         <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900">{{ __('admin.content_groups.heading') }}</h1>
-                <p class="mt-1 text-sm leading-6 text-gray-600">{{ __('admin.content_groups.subtitle') }}</p>
+                <h1 class="text-2xl font-bold text-gray-900">分发中心</h1>
+                <p class="mt-1 text-sm leading-6 text-gray-600">以主文章为单位建立发布包，统一管理多平台版本、审核、导出和发布回填。</p>
             </div>
-            <a href="{{ route('admin.articles.index') }}" class="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
-                <i data-lucide="arrow-left" class="mr-2 h-4 w-4"></i>
-                {{ __('admin.content_groups.back_to_articles') }}
-            </a>
+            <div class="flex flex-wrap gap-3">
+                <a href="{{ route('admin.content-platform-specifications.index') }}" class="inline-flex items-center justify-center rounded-md border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100">平台发布规则</a>
+                <a href="{{ route('admin.content-center.index') }}" class="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                    <i data-lucide="arrow-left" class="mr-2 h-4 w-4"></i>
+                    返回内容中心
+                </a>
+            </div>
         </div>
 
         <section class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -25,7 +28,7 @@
             <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                     <h2 class="text-base font-semibold text-gray-900">{{ __('admin.content_groups.create_title') }}</h2>
-                    <p class="mt-1 text-sm text-gray-600">{{ __('admin.content_groups.create_desc') }}</p>
+                    <p class="mt-1 text-sm text-gray-600">仅显示已通过审核、且尚未建立发布包的主文章。</p>
                 </div>
                 @if ($availableArticles->isNotEmpty())
                     <form method="POST" action="{{ route('admin.content-groups.store', $availableArticles->first()) }}" class="flex w-full flex-col gap-3 sm:flex-row lg:max-w-2xl" data-content-group-create-form>

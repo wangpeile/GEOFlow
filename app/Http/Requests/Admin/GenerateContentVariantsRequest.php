@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Admin;
 
-use App\Support\GeoFlow\ContentPlatformCatalog;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -17,10 +16,8 @@ class GenerateContentVariantsRequest extends FormRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        $platforms = array_values(array_diff(
-            array_keys(app(ContentPlatformCatalog::class)->all()),
-            ['wordpress'],
-        ));
+        // Keep legacy platform rows regenerable while new content groups only receive active catalog entries.
+        $platforms = array_values(array_diff(array_keys((array) config('content_platforms', [])), ['wordpress']));
 
         return [
             'platforms' => ['required', 'array', 'size:1'],

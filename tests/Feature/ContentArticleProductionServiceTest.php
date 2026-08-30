@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Contracts\GeoFlow\ContentSectionGenerator;
 use App\Enums\ContentDirectionKind;
 use App\Enums\ContentSectionStatus;
+use App\Enums\QualityReportStatus;
 use App\Models\Admin;
 use App\Models\Article;
 use App\Models\ArticleVersion;
@@ -13,8 +14,10 @@ use App\Models\Category;
 use App\Models\ContentDirectionVersion;
 use App\Models\ContentProduction;
 use App\Models\ContentSectionVersion;
+use App\Models\QualityReport;
 use App\Models\Task;
 use App\Services\GeoFlow\ArticleAssemblyService;
+use App\Services\GeoFlow\MainArticlePromotionService;
 use App\Services\GeoFlow\ChineseContentGuard;
 use App\Services\GeoFlow\SectionDraftingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -93,7 +96,7 @@ class ContentArticleProductionServiceTest extends TestCase
         $this->assertSame($before[$nodes[2]['id']], $after[$nodes[2]['id']]);
     }
 
-    public function test_assembly_is_ordered_idempotent_and_syncs_one_draft_article(): void
+    public function test_assembly_is_ordered_idempotent_and_keeps_new_work_order_separate_from_main_article(): void
     {
         [$admin, $production, $nodes] = $this->context();
         $drafting = app(SectionDraftingService::class);
@@ -107,17 +110,16 @@ class ContentArticleProductionServiceTest extends TestCase
         $second = $assembly->assemble($admin, $production);
 
         $this->assertTrue($first->is($second));
-        $this->assertSame(1, Article::query()->count());
+        $this->assertSame(0, Article::query()->count());
         $this->assertSame(1, ArticleVersion::query()->count());
-        $this->assertSame('draft', $first->article->status);
-        $this->assertSame('pending', $first->article->review_status);
+        $this->assertNull($first->article_id);
         $this->assertStringContainsString('## '.$nodes[0]['heading'], $first->body);
         $this->assertStringContainsString('## 常见问题', $first->body);
         $this->assertLessThan(
             mb_strpos($first->body, $nodes[1]['heading']),
             mb_strpos($first->body, $nodes[0]['heading']),
         );
-        $this->assertNull($first->article->published_at);
+        $this->assertNull($production->fresh()->article_id);
     }
 
     public function test_revised_outline_reconciles_sections_and_preserves_only_unchanged_content(): void
@@ -178,7 +180,7 @@ class ContentArticleProductionServiceTest extends TestCase
         $this->assertStringContainsString($originalSections[$nodes[0]['id']]->content, $assembled->body);
     }
 
-    public function test_assembly_requires_explicit_article_ownership_and_guard_rejects_ai_instructions(): void
+    public function test_main_article_requires_explicit_ownership_only_when_promoted(): void
     {
         [$admin, $production, $nodes] = $this->context(false);
         $drafting = app(SectionDraftingService::class);
@@ -187,8 +189,55 @@ class ContentArticleProductionServiceTest extends TestCase
             $drafting->saveManual($admin, $production, $node['id'], $this->sectionContent($node['heading']));
         }
 
+        $version = app(ArticleAssemblyService::class)->assemble($admin, $production);
+        QualityReport::query()->create([
+            'content_production_id' => $production->id,
+            'article_version_id' => $version->id,
+            'version' => 1,
+            'status' => QualityReportStatus::Passed,
+            'issues' => [],
+            'summary' => ['blockers' => 0, 'warnings' => 0],
+            'input_hash' => hash('sha256', 'passed-'.$version->id),
+            'ruleset_version' => 'test',
+            'risk_snapshot' => [],
+            'created_by_admin_id' => $admin->id,
+            'checked_at' => now(),
+        ]);
+
         $this->expectException(ValidationException::class);
-        app(ArticleAssemblyService::class)->assemble($admin, $production);
+        app(MainArticlePromotionService::class)->promote($admin, $production);
+    }
+
+    public function test_promotion_after_quality_check_creates_one_main_article_and_links_history(): void
+    {
+        [$admin, $production, $nodes] = $this->context();
+        $drafting = app(SectionDraftingService::class);
+        $drafting->initialize($admin, $production);
+        foreach ($nodes as $node) {
+            $drafting->saveManual($admin, $production, $node['id'], $this->sectionContent($node['heading']));
+        }
+        $version = app(ArticleAssemblyService::class)->assemble($admin, $production);
+        QualityReport::query()->create([
+            'content_production_id' => $production->id,
+            'article_version_id' => $version->id,
+            'version' => 1,
+            'status' => QualityReportStatus::Passed,
+            'issues' => [],
+            'summary' => ['blockers' => 0, 'warnings' => 0],
+            'input_hash' => hash('sha256', 'passed-'.$version->id),
+            'ruleset_version' => 'test',
+            'risk_snapshot' => [],
+            'created_by_admin_id' => $admin->id,
+            'checked_at' => now(),
+        ]);
+
+        $article = app(MainArticlePromotionService::class)->promote($admin, $production);
+
+        $this->assertSame(1, Article::query()->count());
+        $this->assertSame('draft', $article->status);
+        $this->assertSame('pending', $article->review_status);
+        $this->assertSame($article->id, $production->fresh()->article_id);
+        $this->assertSame($article->id, $version->fresh()->article_id);
     }
 
     public function test_chinese_guard_allows_technical_terms_but_rejects_model_meta_instructions(): void

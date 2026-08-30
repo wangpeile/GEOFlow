@@ -79,30 +79,34 @@ final class ArticleAssemblyService
                 return $existing;
             }
 
-            [$categoryId, $authorId] = $this->resolveArticleOwnership($lockedProduction);
-            $article = $lockedProduction->article_id
-                ? Article::query()->lockForUpdate()->findOrFail($lockedProduction->article_id)
-                : new Article(['slug' => ArticleWorkflow::generateUniqueSlug($title)]);
-
-            $article->fill([
-                'title' => $title,
-                'excerpt' => $summary,
-                'content' => $body,
-                'category_id' => $categoryId,
-                'author_id' => $authorId,
-                'task_id' => $lockedProduction->task_id,
-                'original_keyword' => $lockedProduction->topic,
-                'keywords' => $lockedProduction->topic,
-                'meta_description' => $metaDescription,
-                'status' => 'draft',
-                'review_status' => 'pending',
-                'is_ai_generated' => 1,
-                'published_at' => null,
-            ])->save();
+            // A work order first owns an assembled draft and its quality history.  Existing
+            // historical work orders may already be linked to a main article, so keep syncing
+            // those records for backwards compatibility.  New work orders are promoted only
+            // after the quality gate passes.
+            $article = null;
+            if ($lockedProduction->article_id) {
+                [$categoryId, $authorId] = $this->resolveArticleOwnership($lockedProduction);
+                $article = Article::query()->lockForUpdate()->findOrFail($lockedProduction->article_id);
+                $article->fill([
+                    'title' => $title,
+                    'excerpt' => $summary,
+                    'content' => $body,
+                    'category_id' => $categoryId,
+                    'author_id' => $authorId,
+                    'task_id' => $lockedProduction->task_id,
+                    'original_keyword' => $lockedProduction->topic,
+                    'keywords' => $lockedProduction->topic,
+                    'meta_description' => $metaDescription,
+                    'status' => 'draft',
+                    'review_status' => 'pending',
+                    'is_ai_generated' => 1,
+                    'published_at' => null,
+                ])->save();
+            }
 
             $version = ArticleVersion::query()->create([
                 'content_production_id' => $lockedProduction->id,
-                'article_id' => $article->id,
+                'article_id' => $article?->id,
                 'version' => ((int) ArticleVersion::query()
                     ->where('content_production_id', $lockedProduction->id)
                     ->max('version')) + 1,
@@ -120,7 +124,6 @@ final class ArticleAssemblyService
             ]);
 
             $lockedProduction->forceFill([
-                'article_id' => $article->id,
                 'status' => ContentProductionStatus::WaitingInput,
                 'current_stage' => ContentProductionStage::QualityGate,
                 'last_error_message' => null,
@@ -131,7 +134,7 @@ final class ArticleAssemblyService
                 'admin_id' => $admin->id,
                 'event' => 'article.assembled',
                 'metadata' => [
-                    'article_id' => $article->id,
+                    'article_id' => $article?->id,
                     'article_version_id' => $version->id,
                     'section_version_ids' => $sections->pluck('id')->all(),
                 ],
@@ -276,7 +279,7 @@ final class ArticleAssemblyService
 
     private function markAssemblySucceeded(
         ContentProduction $production,
-        Article $article,
+        ?Article $article,
         ArticleVersion $version,
     ): void {
         $run = $production->stageRuns()
@@ -286,7 +289,7 @@ final class ArticleAssemblyService
         $run?->forceFill([
             'status' => ContentStageStatus::Succeeded,
             'output_payload' => [
-                'article_id' => $article->id,
+                'article_id' => $article?->id,
                 'article_version_id' => $version->id,
             ],
             'failure_type' => null,

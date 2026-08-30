@@ -6,16 +6,16 @@ use App\Models\Admin;
 use App\Models\ContentVariant;
 use App\Models\ContentVariantReview;
 use App\Models\ContentVariantVersion;
-use App\Support\GeoFlow\ContentPlatformCatalog;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 final class ContentVariantWorkflowService
 {
     public function __construct(
-        private readonly ContentPlatformCatalog $platformCatalog,
+        private readonly ContentPlatformSpecificationResolver $specificationResolver,
         private readonly ContentVariantFactChecker $factChecker,
         private readonly ContentVariantQualityChecker $qualityChecker,
+        private readonly ContentVariantPublicationPackBuilder $publicationPackBuilder,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -29,20 +29,20 @@ final class ContentVariantWorkflowService
 
         $tags = array_values(array_unique(array_filter(array_map('trim', $data['tags'] ?? []))));
         $images = array_values(array_unique(array_filter(array_map('trim', $data['image_requirements'] ?? []))));
+        $specification = $this->specificationResolver->resolve($variant->platform);
         $sourceContent = $this->sourceContent($variant);
         $generatedContent = implode("\n", array_filter([$data['title'], $data['excerpt'] ?? null, $data['content']]));
         $factCheck = $this->factChecker->inspect($sourceContent, $generatedContent);
         $qualityCheck = $this->qualityChecker->inspect(
             $data['title'],
             $data['content'],
-            $this->platformCatalog->get($variant->platform),
+            $specification['rules'],
             $factCheck,
             $data['excerpt'] ?? null,
             $tags,
             $images,
         );
-
-        return DB::transaction(function () use ($variant, $admin, $data, $tags, $images, $factCheck, $qualityCheck, $sourceContent): ContentVariant {
+        return DB::transaction(function () use ($variant, $admin, $data, $tags, $images, $factCheck, $qualityCheck, $sourceContent, $specification): ContentVariant {
             $locked = ContentVariant::query()->whereKey($variant->id)->lockForUpdate()->firstOrFail();
             $this->assertEditable($locked);
             if ($locked->version !== (int) $data['current_version']) {
@@ -55,7 +55,14 @@ final class ContentVariantWorkflowService
                 'operation' => 'manual_edit',
                 'edited_at' => now()->toIso8601String(),
                 'source_content_hash' => hash('sha256', $sourceContent),
+                'platform_rules' => $this->specificationResolver->snapshot($locked->platform, $specification),
             ]);
+
+            $locked->fill([
+                'title' => $data['title'], 'excerpt' => $data['excerpt'] ?? null, 'content' => $data['content'],
+                'tags' => $tags, 'image_requirements' => $images, 'version' => $nextVersion,
+            ]);
+            $publicationPayload = $this->publicationPackBuilder->build($locked, $specification['rules'], $qualityCheck);
 
             ContentVariantVersion::query()->create([
                 'content_variant_id' => $locked->id,
@@ -69,6 +76,7 @@ final class ContentVariantWorkflowService
                 'template_version' => $locked->template_version,
                 'generation_meta' => $meta,
                 'quality_check' => $qualityCheck,
+                'publication_payload' => $publicationPayload,
                 'created_by' => $admin->id,
             ]);
 
@@ -83,6 +91,10 @@ final class ContentVariantWorkflowService
                 'source_content_hash' => hash('sha256', $sourceContent),
                 'fact_check' => $factCheck,
                 'quality_check' => $qualityCheck,
+                'content_platform_specification_id' => $specification['specification']?->id,
+                'platform_specification_version' => $specification['version'],
+                'publication_payload' => $publicationPayload,
+                'publication_readiness' => $qualityCheck,
                 'status' => ContentVariant::STATUS_REVIEW_PENDING,
                 'review_status' => ContentVariant::REVIEW_PENDING,
                 'reviewed_by' => null,

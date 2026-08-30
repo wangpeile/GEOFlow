@@ -19,6 +19,7 @@ class ContentVariantVersion extends Model
         'template_version',
         'generation_meta',
         'quality_check',
+        'publication_payload',
         'created_by',
     ];
 
@@ -31,6 +32,7 @@ class ContentVariantVersion extends Model
             'image_requirements' => 'array',
             'generation_meta' => 'array',
             'quality_check' => 'array',
+            'publication_payload' => 'array',
             'created_by' => 'integer',
         ];
     }

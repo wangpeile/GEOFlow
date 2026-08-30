@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\SaveContentSectionRequest;
 use App\Models\ContentProduction;
 use App\Models\QualityReport;
 use App\Services\GeoFlow\ArticleAssemblyService;
+use App\Services\GeoFlow\MainArticlePromotionService;
 use App\Services\GeoFlow\QualityGateService;
 use App\Services\GeoFlow\SectionDraftingService;
 use App\Services\GeoFlow\TargetedRepairService;
@@ -20,6 +21,7 @@ class ContentArticleController extends Controller
     public function __construct(
         private readonly SectionDraftingService $sectionDraftingService,
         private readonly ArticleAssemblyService $articleAssemblyService,
+        private readonly MainArticlePromotionService $mainArticlePromotionService,
         private readonly QualityGateService $qualityGateService,
         private readonly TargetedRepairService $targetedRepairService,
     ) {}
@@ -98,7 +100,20 @@ class ContentArticleController extends Controller
             $contentProduction,
         );
 
-        return back()->with('message', "文章草稿已组装并同步（版本 {$version->version}）。");
+        return back()->with('message', "完整文章草稿已组装（版本 {$version->version}），请完成质量检查后再固化为主文章。");
+    }
+
+    public function promote(ContentProduction $contentProduction): RedirectResponse
+    {
+        $this->ensureEnabled();
+        $article = $this->mainArticlePromotionService->promote(
+            Auth::guard('admin')->user(),
+            $contentProduction,
+        );
+
+        return redirect()
+            ->route('admin.articles.edit', $article)
+            ->with('message', '已固化为主文章，现可进入内容中心审核、编辑和发布。');
     }
 
     public function inspectQuality(ContentProduction $contentProduction): RedirectResponse

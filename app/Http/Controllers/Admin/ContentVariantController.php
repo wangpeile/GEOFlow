@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ExportContentVariantsRequest;
 use App\Http\Requests\Admin\ReviewContentVariantRequest;
+use App\Http\Requests\Admin\StoreContentPlatformFeedbackRequest;
 use App\Http\Requests\Admin\UpdateContentVariantRequest;
 use App\Models\ContentGroup;
 use App\Models\ContentVariant;
+use App\Models\ContentPlatformFeedback;
 use App\Services\GeoFlow\ContentVariantExportService;
 use App\Services\GeoFlow\ContentVariantWorkflowService;
 use App\Support\AdminWeb;
@@ -78,6 +80,37 @@ class ContentVariantController extends Controller
         } catch (RuntimeException $exception) {
             return back()->withErrors([$exception->getMessage()]);
         }
+    }
+
+    public function preview(ContentGroup $contentGroup, ContentVariant $contentVariant): View
+    {
+        $this->assertNested($contentGroup, $contentVariant);
+        abort_if($contentVariant->platform === 'wordpress', 404);
+        $contentVariant->load(['platformFeedback.admin:id,username']);
+
+        return view('admin.content-groups.variant-preview', [
+            'pageTitle' => '发布预览', 'activeMenu' => 'content_production', 'adminSiteName' => AdminWeb::siteName(),
+            'contentGroup' => $contentGroup, 'variant' => $contentVariant,
+            'platform' => $this->platformCatalog->get($contentVariant->platform),
+        ]);
+    }
+
+    public function feedback(StoreContentPlatformFeedbackRequest $request, ContentGroup $contentGroup, ContentVariant $contentVariant): RedirectResponse
+    {
+        $this->assertNested($contentGroup, $contentVariant);
+        abort_if($contentVariant->platform === 'wordpress', 404);
+        $data = $request->validated();
+        ContentPlatformFeedback::query()->create([
+            'content_variant_id' => $contentVariant->id,
+            'admin_id' => $request->user('admin')->id,
+            'outcome' => $data['outcome'],
+            'reasons' => $data['reasons'] ?? [],
+            'manual_adjustments' => $data['manual_adjustments'] ?? [],
+            'notes' => $data['notes'] ?? null,
+            'submitted_at' => now(),
+        ]);
+
+        return back()->with('message', '发布结果已记录，后续可据此维护平台规则。');
     }
 
     private function assertNested(ContentGroup $contentGroup, ContentVariant $contentVariant): void

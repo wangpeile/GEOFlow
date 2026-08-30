@@ -54,13 +54,14 @@ class ContentGroupController extends Controller
 
         return view('admin.content-groups.index', [
             'pageTitle' => __('admin.content_groups.page_title'),
-            'activeMenu' => 'content_production',
+            'activeMenu' => 'distribution_center',
             'adminSiteName' => AdminWeb::siteName(),
             'contentGroups' => $contentGroups,
             'packageCounts' => $packageCounts,
             'query' => $query,
             'availableArticles' => Article::query()
                 ->select(['id', 'title', 'created_at'])
+                ->whereIn('review_status', ['approved', 'auto_approved'])
                 ->whereDoesntHave('contentGroup')
                 ->latest()
                 ->limit(100)
@@ -70,6 +71,12 @@ class ContentGroupController extends Controller
 
     public function store(Article $article): RedirectResponse
     {
+        if (! in_array($article->review_status, ['approved', 'auto_approved'], true)) {
+            return back()->withErrors([
+                'article' => '主文章通过审核后，才能建立发布包。',
+            ]);
+        }
+
         $contentGroup = $this->contentGroupService->ensureForArticle($article);
 
         return redirect()
@@ -86,7 +93,7 @@ class ContentGroupController extends Controller
                 'id', 'content_group_id', 'source_article_id', 'platform', 'title', 'excerpt', 'content',
                 'tags', 'image_requirements', 'status', 'review_status', 'version', 'template_version',
                 'generation_meta', 'source_content_hash', 'fact_check', 'failure_message',
-                'quality_check', 'reviewed_by', 'reviewed_at', 'review_note',
+                'quality_check', 'publication_payload', 'publication_readiness', 'platform_specification_version', 'content_platform_specification_id', 'reviewed_by', 'reviewed_at', 'review_note',
                 'published_url', 'published_at', 'updated_at',
             ]),
             'variants.latestPublication' => fn ($query) => $query->select([
@@ -110,13 +117,18 @@ class ContentGroupController extends Controller
         ]);
         $staleVariantReasons = $this->contentGroupService->staleVariantReasons($contentGroup);
 
+        $platforms = $this->platformCatalog->all();
+        foreach ($contentGroup->variants as $variant) {
+            $platforms[$variant->platform] ??= $this->platformCatalog->get($variant->platform);
+        }
+
         return view('admin.content-groups.show', [
             'pageTitle' => __('admin.content_groups.detail_title'),
-            'activeMenu' => 'content_production',
+            'activeMenu' => 'distribution_center',
             'adminSiteName' => AdminWeb::siteName(),
             'contentGroup' => $contentGroup,
             'staleVariantReasons' => $staleVariantReasons,
-            'platforms' => $this->platformCatalog->all(),
+            'platforms' => $platforms,
             'wordpressChannels' => DistributionChannel::query()
                 ->select(['id', 'name', 'domain'])
                 ->where('channel_type', 'wordpress_rest')

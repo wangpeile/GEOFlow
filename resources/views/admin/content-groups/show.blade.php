@@ -214,6 +214,9 @@
                         </div>
                     @endif
                     @if ($variant->platform !== 'wordpress' && auth('admin')->user()?->canManageProtectedWorkflows() && config('geoflow.content_production_pipeline_enabled', false))
+                        @if ($variant->title !== '')
+                            <a href="{{ route('admin.content-groups.variants.preview', [$contentGroup, $variant]) }}" class="mt-5 block w-full rounded-md bg-gray-900 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-gray-700">打开发布预览与一键复制</a>
+                        @endif
                         <a href="{{ route('admin.content-groups.variants.edit', [$contentGroup, $variant]) }}" class="mt-5 block w-full rounded-md border border-gray-300 bg-white px-4 py-2 text-center text-sm font-semibold text-gray-700 hover:bg-gray-50">人工编辑并保存新版本</a>
                         <form method="POST" action="{{ route('admin.content-groups.variants.regenerate', [$contentGroup, $variant]) }}" class="mt-5">
                             @csrf

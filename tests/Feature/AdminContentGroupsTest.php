@@ -74,7 +74,7 @@ class AdminContentGroupsTest extends TestCase
 
         $this->get(route('admin.content-groups.index'))
             ->assertOk()
-            ->assertSee(__('admin.content_groups.heading'))
+            ->assertSee('分发中心')
             ->assertSee($article->title);
 
         $response = $this->get(route('admin.content-groups.show', $contentGroup))
@@ -84,6 +84,37 @@ class AdminContentGroupsTest extends TestCase
         foreach (config('content_platforms') as $platform) {
             $response->assertSee($platform['label']);
         }
+    }
+
+    public function test_unreviewed_article_cannot_create_a_publishing_package(): void
+    {
+        config()->set('geoflow.content_production_pipeline_enabled', true);
+        $admin = $this->admin('content_group_reviewer', 'super_admin');
+        $article = $this->article('待审核主文章')->forceFill(['review_status' => 'pending']);
+        $article->save();
+
+        $this->actingAs($admin, 'admin')
+            ->post(route('admin.content-groups.store', $article))
+            ->assertSessionHasErrors('article');
+
+        $this->assertDatabaseMissing('content_groups', ['main_article_id' => $article->id]);
+    }
+
+    public function test_content_assets_and_content_center_have_separate_entry_points(): void
+    {
+        config()->set('geoflow.content_production_pipeline_enabled', true);
+        $admin = $this->admin('content_center_admin', 'super_admin');
+        $article = $this->article('内容中心主文章');
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.content-assets.index'))
+            ->assertOk()
+            ->assertSee('内容资产');
+
+        $this->get(route('admin.content-center.index'))
+            ->assertOk()
+            ->assertSee('内容中心')
+            ->assertSee($article->title);
     }
 
     public function test_approved_article_from_opted_in_production_plan_prepares_a_publishing_package(): void

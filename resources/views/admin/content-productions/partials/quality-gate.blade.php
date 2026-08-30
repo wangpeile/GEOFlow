@@ -6,10 +6,18 @@
                 <p class="mt-1 text-sm leading-6 text-gray-500">阻断项必须处理后才能发布；警告项可以人工确认。自动修复只处理明确可替换的问题，并保留前后版本。</p>
             </div>
             @if ($currentArticleVersion && auth('admin')->user()?->canManageProtectedWorkflows() && config('geoflow.content_production_pipeline_enabled', false))
-                <form method="POST" action="{{ route('admin.content-productions.article.quality.inspect', $production) }}">
-                    @csrf
-                    <button class="whitespace-nowrap rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">执行质量检查</button>
-                </form>
+                <div class="flex flex-wrap gap-2">
+                    <form method="POST" action="{{ route('admin.content-productions.article.quality.inspect', $production) }}">
+                        @csrf
+                        <button class="whitespace-nowrap rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">执行质量检查</button>
+                    </form>
+                    @if ($currentQualityReport && $currentQualityReport->status !== \App\Enums\QualityReportStatus::Blocked && ! $production->article_id)
+                        <form method="POST" action="{{ route('admin.content-productions.article.promote', $production) }}">
+                            @csrf
+                            <button class="whitespace-nowrap rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">固化为主文章</button>
+                        </form>
+                    @endif
+                </div>
             @endif
         </div>
     </div>

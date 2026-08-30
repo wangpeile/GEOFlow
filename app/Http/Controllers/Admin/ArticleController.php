@@ -50,7 +50,7 @@ class ArticleController extends Controller
             'pageTitle' => $isTrashView
                 ? __('admin.articles.trash.title')
                 : __('admin.articles.page_title'),
-            'activeMenu' => 'articles',
+            'activeMenu' => 'content_center',
             'adminSiteName' => AdminWeb::siteName(),
             'articles' => $articles,
             'stats' => $isTrashView ? $this->loadTrashStats() : $this->loadStats(),
@@ -209,7 +209,7 @@ class ArticleController extends Controller
     {
         return view('admin.articles.form', [
             'pageTitle' => __('admin.article_create.page_title'),
-            'activeMenu' => 'articles',
+            'activeMenu' => 'content_center',
             'adminSiteName' => AdminWeb::siteName(),
             'isEdit' => false,
             'articleId' => null,
@@ -301,7 +301,7 @@ class ArticleController extends Controller
 
         return view('admin.articles.form', [
             'pageTitle' => __('admin.article_edit.page_title'),
-            'activeMenu' => 'articles',
+            'activeMenu' => 'content_center',
             'adminSiteName' => AdminWeb::siteName(),
             'isEdit' => true,
             'articleId' => $articleId,

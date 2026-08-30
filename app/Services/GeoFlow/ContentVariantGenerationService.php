@@ -6,7 +6,6 @@ use App\Contracts\GeoFlow\ContentVariantGenerator;
 use App\Models\Admin;
 use App\Models\ContentVariant;
 use App\Models\ContentVariantVersion;
-use App\Support\GeoFlow\ContentPlatformCatalog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -16,9 +15,10 @@ final class ContentVariantGenerationService
 {
     public function __construct(
         private readonly ContentVariantGenerator $generator,
-        private readonly ContentPlatformCatalog $platformCatalog,
+        private readonly ContentPlatformSpecificationResolver $specificationResolver,
         private readonly ContentVariantFactChecker $factChecker,
         private readonly ContentVariantQualityChecker $qualityChecker,
+        private readonly ContentVariantPublicationPackBuilder $publicationPackBuilder,
     ) {}
 
     public function generate(ContentVariant $variant, Admin $admin): ContentVariant
@@ -32,7 +32,8 @@ final class ContentVariantGenerationService
             throw new RuntimeException('源文章不存在，无法生成平台版本。');
         }
 
-        $rules = $this->platformCatalog->get($variant->platform);
+        $specification = $this->specificationResolver->resolve($variant->platform);
+        $rules = $specification['rules'];
         if ($rules === []) {
             throw new RuntimeException('目标平台规则不存在。');
         }
@@ -78,7 +79,7 @@ final class ContentVariantGenerationService
             );
             $sourceHash = hash('sha256', $sourceContent);
 
-            return DB::transaction(function () use ($variant, $admin, $generated, $rules, $token, $factCheck, $qualityCheck, $sourceHash): ContentVariant {
+            return DB::transaction(function () use ($variant, $admin, $generated, $rules, $specification, $token, $factCheck, $qualityCheck, $sourceHash): ContentVariant {
                 $locked = ContentVariant::query()->whereKey($variant->id)->lockForUpdate()->firstOrFail();
                 if ($locked->generation_token !== $token || $locked->status !== ContentVariant::STATUS_GENERATING) {
                     throw new RuntimeException('本次生成已被更新的请求替代，结果未保存。');
@@ -87,7 +88,7 @@ final class ContentVariantGenerationService
                     ->where('content_variant_id', $locked->id)
                     ->max('version')) + 1;
                 $meta = [
-                    'platform_rules' => $rules,
+                    'platform_rules' => $this->specificationResolver->snapshot($locked->platform, $specification),
                     'model' => $generated['model'] ?? null,
                     'source' => $generated['source'] ?? null,
                     'generated_at' => now()->toIso8601String(),
@@ -95,6 +96,12 @@ final class ContentVariantGenerationService
                     'fact_check' => $factCheck,
                     'quality_check' => $qualityCheck,
                 ];
+
+                $locked->fill([
+                    'title' => $generated['title'], 'excerpt' => $generated['excerpt'], 'content' => $generated['content'],
+                    'tags' => $generated['tags'], 'image_requirements' => $generated['image_requirements'], 'version' => $nextVersion,
+                ]);
+                $publicationPayload = $this->publicationPackBuilder->build($locked, $rules, $qualityCheck);
 
                 ContentVariantVersion::query()->create([
                     'content_variant_id' => $locked->id,
@@ -108,6 +115,7 @@ final class ContentVariantGenerationService
                     'template_version' => (string) ($rules['template_version'] ?? '1.0'),
                     'generation_meta' => $meta,
                     'quality_check' => $qualityCheck,
+                    'publication_payload' => $publicationPayload,
                     'created_by' => $admin->id,
                 ]);
 
@@ -121,10 +129,14 @@ final class ContentVariantGenerationService
                     'review_status' => ContentVariant::REVIEW_PENDING,
                     'version' => $nextVersion,
                     'template_version' => (string) ($rules['template_version'] ?? '1.0'),
+                    'content_platform_specification_id' => $specification['specification']?->id,
+                    'platform_specification_version' => $specification['version'],
                     'generation_meta' => $meta,
                     'source_content_hash' => $sourceHash,
                     'fact_check' => $factCheck,
                     'quality_check' => $qualityCheck,
+                    'publication_payload' => $publicationPayload,
+                    'publication_readiness' => $qualityCheck,
                     'reviewed_by' => null,
                     'reviewed_at' => null,
                     'review_note' => null,

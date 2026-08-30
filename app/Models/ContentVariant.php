@@ -31,6 +31,7 @@ class ContentVariant extends Model
         'content_group_id',
         'source_article_id',
         'platform',
+        'content_platform_specification_id',
         'title',
         'excerpt',
         'content',
@@ -43,12 +44,15 @@ class ContentVariant extends Model
         'review_note',
         'version',
         'template_version',
+        'platform_specification_version',
         'generation_meta',
         'generation_token',
         'generation_started_at',
         'source_content_hash',
         'fact_check',
         'quality_check',
+        'publication_payload',
+        'publication_readiness',
         'failure_message',
         'published_url',
         'published_at',
@@ -73,6 +77,8 @@ class ContentVariant extends Model
             'generation_meta' => 'array',
             'fact_check' => 'array',
             'quality_check' => 'array',
+            'publication_payload' => 'array',
+            'publication_readiness' => 'array',
             'reviewed_by' => 'integer',
             'reviewed_at' => 'datetime',
             'generation_started_at' => 'datetime',
@@ -108,5 +114,15 @@ class ContentVariant extends Model
     public function latestPublication(): HasOne
     {
         return $this->hasOne(ArticleDistribution::class)->latestOfMany();
+    }
+
+    public function platformSpecification(): BelongsTo
+    {
+        return $this->belongsTo(ContentPlatformSpecification::class);
+    }
+
+    public function platformFeedback(): HasMany
+    {
+        return $this->hasMany(ContentPlatformFeedback::class)->latest();
     }
 }
