@@ -316,6 +316,8 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                     ->middleware('admin.super')->name('article.quality.inspect');
                 Route::post('{contentProduction}/article/quality/{qualityReport}/repair', [ContentArticleController::class, 'repairQuality'])
                     ->middleware('admin.super')->name('article.quality.repair');
+                Route::post('{contentProduction}/article/revisions', [ContentArticleController::class, 'revise'])
+                    ->middleware('admin.super')->name('article.revisions.store');
             });
 
         // 兼容早期“内容项目”入口；新界面统一使用“文章工作单”。

@@ -141,6 +141,11 @@ class ContentProduction extends Model
         return $this->hasMany(QualityRepairAttempt::class)->latest('attempt');
     }
 
+    public function articleRevisionRequests(): HasMany
+    {
+        return $this->hasMany(ContentArticleRevisionRequest::class)->latest('id');
+    }
+
     public function researchReports(): HasMany
     {
         return $this->hasMany(ContentResearchReport::class)->latest('collected_at')->latest('id');

@@ -95,14 +95,18 @@
                 <div class="border-b border-gray-200 bg-fuchsia-50 p-6">
                     <form method="POST" action="{{ route('admin.content-productions.research.store', $production) }}" class="space-y-3 rounded-lg border border-fuchsia-200 bg-white p-4">
                         @csrf
-                        <div><h3 class="text-sm font-semibold text-gray-900">SERP / 竞品研究</h3><p class="mt-1 text-xs text-gray-500">选择已经完成的 URL 智能采集结果进行对比；不会在这里直接抓取网页。没有来源时自动降级为知识库 / URL 模式。</p></div>
+                        <div><h3 class="text-sm font-semibold text-gray-900">外部研究与内容缺口</h3><p class="mt-1 text-xs text-gray-500">联网研究只保存带链接的研究摘要；网页正文仍须经 URL 智能采集后，才可作为文章证据使用。</p></div>
                         <input name="keyword" value="{{ $production->topic }}" required maxlength="500" class="w-full rounded-md border-gray-300 text-sm" aria-label="研究关键词">
+                        <label class="flex items-start gap-2 rounded-md bg-fuchsia-50 px-3 py-2 text-sm text-gray-700">
+                            <input type="checkbox" name="use_web_search" value="1" checked class="mt-0.5 rounded border-gray-300 text-fuchsia-600 focus:ring-fuchsia-500">
+                            <span><span class="font-medium">使用 AI 联网研究</span><span class="mt-0.5 block text-xs text-gray-500">需要启用支持联网检索的 OpenAI、Gemini 或 Anthropic 写作模型；不支持时会明确降级，不阻断已有资料研究。</span></span>
+                        </label>
                         <select name="url_import_job_ids[]" multiple size="4" class="w-full rounded-md border-gray-300 text-sm">
                             @foreach ($urlImportJobs as $job)
                                 <option value="{{ $job->id }}">{{ $job->page_title ?: $job->normalized_url }}</option>
                             @endforeach
                         </select>
-                        <button class="rounded-md bg-fuchsia-600 px-4 py-2 text-sm font-semibold text-white hover:bg-fuchsia-700">生成竞品与内容缺口报告</button>
+                        <button class="rounded-md bg-fuchsia-600 px-4 py-2 text-sm font-semibold text-white hover:bg-fuchsia-700">生成外部研究与内容缺口报告</button>
                     </form>
                 </div>
                 <div class="grid grid-cols-1 gap-5 border-b border-gray-200 bg-slate-50 p-6 lg:grid-cols-3">
@@ -154,7 +158,22 @@
                                 <div><div class="text-xs font-semibold text-gray-500">内容缺口</div><ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-700">@foreach ((array) data_get($report->analysis, 'content_gaps', []) as $gap)<li>{{ $gap }}</li>@endforeach</ul></div>
                                 <div><div class="text-xs font-semibold text-gray-500">建议</div><ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-700">@foreach ((array) data_get($report->analysis, 'recommendations', []) as $recommendation)<li>{{ $recommendation }}</li>@endforeach</ul></div>
                             </div>
-                            <p class="mt-3 text-xs text-gray-400">来源 {{ count((array) $report->sources) }} 个 · 采集 {{ $report->collected_at?->format('Y-m-d H:i:s') }} · 报告 #{{ $report->id }}</p>
+                            @if (data_get($report->analysis, 'web_research_error'))
+                                <p class="mt-3 text-xs text-amber-700">联网研究未完成：{{ data_get($report->analysis, 'web_research_error') }}。已继续使用本地资料。</p>
+                            @endif
+                            @php($webSources = collect((array) $report->sources)->filter(fn ($source) => is_array($source) && ! array_key_exists('job_id', $source) && filled(data_get($source, 'url'))))
+                            @if ($webSources->isNotEmpty())
+                                <div class="mt-3 rounded-md border border-fuchsia-100 bg-white p-3">
+                                    <div class="text-xs font-semibold text-fuchsia-800">可追溯联网引用</div>
+                                    <p class="mt-1 text-xs text-gray-500">这些是研究索引，不是已验证的正文证据。需要引用其内容时，请先使用 URL 智能采集并在上方“加入 URL 采集资料”。</p>
+                                    <ul class="mt-2 space-y-1 text-xs">
+                                        @foreach ($webSources as $source)
+                                            <li><a href="{{ data_get($source, 'url') }}" target="_blank" rel="noopener noreferrer" class="break-all text-blue-700 hover:text-blue-900">{{ data_get($source, 'title') ?: data_get($source, 'url') }}</a></li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+                            <p class="mt-3 text-xs text-gray-400">来源 {{ count((array) $report->sources) }} 个 · 模式 {{ $report->source_mode }} · 采集 {{ $report->collected_at?->format('Y-m-d H:i:s') }} · 报告 #{{ $report->id }}</p>
                         </article>
                     @endforeach
                 </div>

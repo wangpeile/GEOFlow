@@ -117,6 +117,31 @@
                     <a href="{{ route('admin.articles.edit', $currentArticleVersion->article_id) }}" class="whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">打开文章草稿</a>
                 @endif
             </div>
+            @if (auth('admin')->user()?->canManageProtectedWorkflows() && config('geoflow.content_production_pipeline_enabled', false))
+                <form method="POST" action="{{ route('admin.content-productions.article.revisions.store', $production) }}" class="mt-5 border-t border-slate-200 pt-5">
+                    @csrf
+                    <label for="article-feedback" class="block text-sm font-semibold text-gray-900">修改意见</label>
+                    <p class="mt-1 text-xs leading-5 text-gray-500">说明希望修改的事实、表达、结构或受众重点。系统会创建新版本，不会覆盖当前版本，并自动重新质检。</p>
+                    <textarea id="article-feedback" name="feedback" rows="4" maxlength="5000" required class="mt-3 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="例如：把第二部分改得更适合中小企业读者，并补充实施前的准备清单。">{{ old('feedback') }}</textarea>
+                    @error('feedback')<p class="mt-2 text-sm text-red-600">{{ $message }}</p>@enderror
+                    <div class="mt-3 flex justify-end"><button class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">按意见创建修订版本</button></div>
+                </form>
+            @endif
+            @if ($production->articleRevisionRequests->isNotEmpty())
+                <div class="mt-5 border-t border-slate-200 pt-5">
+                    <h4 class="text-sm font-semibold text-gray-900">修改记录</h4>
+                    <div class="mt-3 space-y-3">
+                        @foreach ($production->articleRevisionRequests->take(5) as $revision)
+                            <div class="rounded-md border border-slate-200 bg-white p-3 text-sm">
+                                <div class="flex flex-wrap items-center gap-2"><span class="font-medium text-gray-800">版本 {{ $revision->sourceArticleVersion?->version ?? '—' }} → {{ $revision->revisedArticleVersion?->version ?? '处理中' }}</span><span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{{ $revision->status }}</span></div>
+                                <p class="mt-2 whitespace-pre-wrap text-gray-600">{{ $revision->feedback }}</p>
+                                @if (filled(data_get($revision->result, 'changes')))<p class="mt-2 text-xs text-gray-500">{{ implode('；', (array) data_get($revision->result, 'changes')) }}</p>@endif
+                                @if ($revision->error_message)<p class="mt-2 text-xs text-red-600">{{ $revision->error_message }}</p>@endif
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         </div>
     @endif
 </section>

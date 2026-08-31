@@ -6,9 +6,11 @@ use App\Enums\ContentSectionStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\RepairContentQualityRequest;
 use App\Http\Requests\Admin\SaveContentSectionRequest;
+use App\Http\Requests\Admin\StoreContentArticleRevisionRequest;
 use App\Models\ContentProduction;
 use App\Models\QualityReport;
 use App\Services\GeoFlow\ArticleAssemblyService;
+use App\Services\GeoFlow\ContentArticleRevisionService;
 use App\Services\GeoFlow\MainArticlePromotionService;
 use App\Services\GeoFlow\QualityGateService;
 use App\Services\GeoFlow\SectionDraftingService;
@@ -24,6 +26,7 @@ class ContentArticleController extends Controller
         private readonly MainArticlePromotionService $mainArticlePromotionService,
         private readonly QualityGateService $qualityGateService,
         private readonly TargetedRepairService $targetedRepairService,
+        private readonly ContentArticleRevisionService $contentArticleRevisionService,
     ) {}
 
     public function initialize(ContentProduction $contentProduction): RedirectResponse
@@ -147,6 +150,23 @@ class ContentArticleController extends Controller
         return back()->with(
             $result['quality_report']->status->value === 'blocked' ? 'error' : 'message',
             "定向修复完成并已重新检查（文章版本 {$result['article_version']->version}）。",
+        );
+    }
+
+    public function revise(
+        StoreContentArticleRevisionRequest $request,
+        ContentProduction $contentProduction,
+    ): RedirectResponse {
+        $this->ensureEnabled();
+        $result = $this->contentArticleRevisionService->revise(
+            Auth::guard('admin')->user(),
+            $contentProduction,
+            $request->validated('feedback'),
+        );
+
+        return back()->with(
+            $result['quality_report']->status->value === 'blocked' ? 'error' : 'message',
+            "已按修改意见创建文章版本 {$result['article_version']->version}，并完成重新质量检查。",
         );
     }
 

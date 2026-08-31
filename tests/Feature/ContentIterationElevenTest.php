@@ -7,6 +7,7 @@ use App\Enums\ContentEvidenceSourceType;
 use App\Http\Middleware\VerifyCsrfToken;
 use App\Models\Admin;
 use App\Models\Article;
+use App\Models\AiModel;
 use App\Models\Author;
 use App\Models\Category;
 use App\Models\ContentEditorAssist;
@@ -15,6 +16,11 @@ use App\Models\ContentResearchReport;
 use App\Models\UrlImportJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Laravel\Ai\Ai;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\UrlCitation;
+use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\TextResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -105,6 +111,49 @@ class ContentIterationElevenTest extends TestCase
             'source_type' => ContentEvidenceSourceType::SerpResearch->value,
             'source_url' => 'https://example.com/research',
         ]);
+    }
+
+    #[Test]
+    public function ai_web_research_keeps_citations_in_the_report_but_not_as_unverified_evidence(): void
+    {
+        $admin = $this->admin('super_admin');
+        $production = ContentProduction::factory()->create(['created_by_admin_id' => $admin->id, 'topic' => '企业视频会议系统']);
+        AiModel::query()->create([
+            'name' => '联网研究测试模型',
+            'version' => 'test',
+            'api_key' => app(\App\Support\GeoFlow\ApiKeyCrypto::class)->encrypt('test-key'),
+            'model_id' => 'gpt-test',
+            'model_type' => 'chat',
+            'api_url' => 'https://api.openai.com/v1',
+            'failover_priority' => 1,
+            'status' => 'active',
+        ]);
+        Ai::fakeAgent(\App\Ai\Agents\MarkdownContentWriterAgent::class, [
+            new TextResponse(
+                json_encode([
+                    'summary' => '联网研究显示，采购决策通常关注部署、安全和协作体验。',
+                    'covered_terms' => ['视频会议系统', '私有化部署'],
+                    'content_gaps' => ['补充实施验收标准'],
+                    'recommendations' => ['用决策清单组织文章'],
+                ], JSON_UNESCAPED_UNICODE),
+                new Usage,
+                new Meta('openai', 'gpt-test', collect([
+                    new UrlCitation('https://example.com/research', '研究参考页面'),
+                ])),
+            ),
+        ]);
+
+        $this->actingAs($admin, 'admin')->post(
+            route('admin.content-productions.research.store', $production),
+            ['keyword' => '企业视频会议', 'use_web_search' => '1'],
+        )->assertRedirect()->assertSessionHas('message', '联网研究与内容缺口报告已生成。引用网页需先完成 URL 智能采集后才能作为文章证据。');
+
+        $report = ContentResearchReport::query()->sole();
+        $this->assertSame('completed', $report->status);
+        $this->assertSame('ai_web_search', $report->source_mode);
+        $this->assertSame('https://example.com/research', data_get($report->sources, '0.url'));
+        $this->assertSame(0, $production->evidences()->count());
+        $this->assertSame('ai_web_search', data_get($report->analysis, 'research_mode'));
     }
 
     #[Test]

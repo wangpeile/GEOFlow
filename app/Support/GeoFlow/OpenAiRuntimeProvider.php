@@ -87,6 +87,10 @@ final class OpenAiRuntimeProvider
             return 'openai';
         }
 
+        if ($host === 'api.anthropic.com') {
+            return 'anthropic';
+        }
+
         if (str_contains($host, 'openrouter.ai')) {
             return 'openrouter';
         }

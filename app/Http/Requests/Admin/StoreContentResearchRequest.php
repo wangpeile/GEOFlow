@@ -24,6 +24,7 @@ class StoreContentResearchRequest extends FormRequest
     {
         return [
             'keyword' => ['required', 'string', 'max:500'],
+            'use_web_search' => ['nullable', 'boolean'],
             'url_import_job_ids' => ['array', 'max:10'],
             'url_import_job_ids.*' => ['integer', 'distinct', 'exists:url_import_jobs,id'],
         ];

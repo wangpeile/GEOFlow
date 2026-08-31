@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
 
 final class ContentResearchService
 {
+    public function __construct(private readonly ContentWebResearchGenerator $webResearchGenerator) {}
+
     public function create(Admin $admin, ContentProduction $production, array $input): ContentResearchReport
     {
         $jobs = UrlImportJob::query()
@@ -24,19 +26,52 @@ final class ContentResearchService
             ->filter(fn (array $source): bool => $source['content'] !== '')
             ->values();
 
+        $webResearch = null;
+        $webResearchError = null;
+        if ((bool) ($input['use_web_search'] ?? false)) {
+            try {
+                $webResearch = $this->webResearchGenerator->generate($production, (string) $input['keyword']);
+            } catch (\Throwable $exception) {
+                $webResearchError = $exception->getMessage();
+            }
+        }
+
         $analysis = $sources->isEmpty()
             ? $this->fallbackAnalysis()
             : $this->analyze((string) $input['keyword'], $sources->all());
+        if ($webResearch !== null) {
+            $analysis = array_replace($analysis, $webResearch['analysis']);
+            $analysis['competitors'] = array_merge(
+                (array) ($analysis['competitors'] ?? []),
+                $webResearch['sources'],
+            );
+        }
+        if ($webResearchError !== null) {
+            $analysis['web_research_error'] = $webResearchError;
+        }
+        $reportSources = collect($sources)
+            ->map(fn (array $source): array => collect($source)->except('content')->all())
+            ->merge($webResearch['sources'] ?? [])
+            ->unique('url')
+            ->values();
+        $hasUsableResearch = $sources->isNotEmpty() || $webResearch !== null;
+        $sourceMode = match (true) {
+            $sources->isNotEmpty() && $webResearch !== null => 'url_import_and_web_search',
+            $webResearch !== null => 'ai_web_search',
+            $sources->isNotEmpty() => 'url_import',
+            default => 'knowledge_url_fallback',
+        };
 
-        return DB::transaction(function () use ($admin, $production, $input, $sources, $analysis): ContentResearchReport {
+        return DB::transaction(function () use ($admin, $production, $input, $sources, $analysis, $reportSources, $hasUsableResearch, $sourceMode, $webResearch, $webResearchError): ContentResearchReport {
             ContentProduction::query()->whereKey($production->getKey())->lockForUpdate()->firstOrFail();
             $report = $production->researchReports()->create([
                 'created_by_admin_id' => $admin->getKey(),
                 'keyword' => trim((string) $input['keyword']),
-                'status' => $sources->isEmpty() ? 'fallback' : 'completed',
-                'source_mode' => $sources->isEmpty() ? 'knowledge_url_fallback' : 'url_import',
-                'sources' => $sources->map(fn (array $source): array => collect($source)->except('content')->all())->all(),
+                'status' => $hasUsableResearch ? 'completed' : 'fallback',
+                'source_mode' => $sourceMode,
+                'sources' => $reportSources->all(),
                 'analysis' => $analysis,
+                'error_message' => $webResearchError,
                 'collected_at' => now(),
             ]);
 
@@ -60,7 +95,13 @@ final class ContentResearchService
             $production->events()->create([
                 'admin_id' => $admin->getKey(),
                 'event' => 'content_research_created',
-                'metadata' => ['report_id' => $report->getKey(), 'source_count' => $sources->count()],
+                'metadata' => [
+                    'report_id' => $report->getKey(),
+                    'source_count' => $reportSources->count(),
+                    'source_mode' => $sourceMode,
+                    'web_research_requested' => (bool) ($input['use_web_search'] ?? false),
+                    'web_research_completed' => $webResearch !== null,
+                ],
             ]);
 
             return $report;

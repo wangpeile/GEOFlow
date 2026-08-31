@@ -56,10 +56,11 @@
             <div class="rounded-lg border border-gray-200 p-4">
                 <div class="flex items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold text-gray-900">2. 标题候选</h3>
-                    @if ($titleVersion)<span class="text-xs text-gray-500">v{{ $titleVersion->version }}{{ $titleVersion->confirmed_at ? ' · 已确认' : '' }}</span>@endif
+                    @if ($titleVersion)<span class="text-xs text-gray-500">v{{ $titleVersion->version }}{{ ($titles['generation_source'] ?? '') === 'laravel_ai_sdk' ? ' · AI 生成' : ' · 规则生成' }}{{ $titleVersion->confirmed_at ? ' · 已确认' : '' }}</span>@endif
                 </div>
                 <form method="POST" action="{{ route('admin.content-productions.direction.titles.generate', $production) }}" class="mt-3">@csrf<button class="w-full rounded-md border border-violet-300 px-3 py-2 text-sm font-semibold text-violet-700">生成 5 个标题</button></form>
                 @if ($titleVersion)
+                    @if (!empty($titles['generation_note']))<p class="mt-2 text-xs text-gray-500">{{ $titles['generation_note'] }}</p>@endif
                     <form method="POST" action="{{ route('admin.content-productions.direction.titles.select', $production) }}" class="mt-3 space-y-2">
                         @csrf
                         @foreach ($titles['candidates'] ?? [] as $candidate)
@@ -82,9 +83,10 @@
             <div class="rounded-lg border border-gray-200 p-4">
                 <div class="flex items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold text-gray-900">3. 大纲对比</h3>
-                    @if ($outlineVersion)<span class="text-xs text-gray-500">v{{ $outlineVersion->version }}{{ $outlineVersion->confirmed_at ? ' · 已确认' : '' }}</span>@endif
+                    @if ($outlineVersion)<span class="text-xs text-gray-500">v{{ $outlineVersion->version }}{{ ($outlines['generation_source'] ?? '') === 'laravel_ai_sdk' ? ' · AI 生成' : ' · 规则生成' }}{{ $outlineVersion->confirmed_at ? ' · 已确认' : '' }}</span>@endif
                 </div>
                 <form method="POST" action="{{ route('admin.content-productions.direction.outlines.generate', $production) }}" class="mt-3">@csrf<button class="w-full rounded-md border border-violet-300 px-3 py-2 text-sm font-semibold text-violet-700">生成两个大纲</button></form>
+                @if (!empty($outlines['generation_note']))<p class="mt-2 text-xs text-gray-500">{{ $outlines['generation_note'] }}</p>@endif
                 @foreach ($outlines['candidates'] ?? [] as $candidate)
                     <div class="mt-3 rounded-md border p-3 {{ ($outlines['selected_id'] ?? null) === $candidate['id'] ? 'border-violet-400 bg-violet-50' : 'border-gray-200' }}">
                         <div class="flex items-center justify-between gap-2">

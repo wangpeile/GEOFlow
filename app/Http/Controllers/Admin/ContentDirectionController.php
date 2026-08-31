@@ -39,7 +39,7 @@ class ContentDirectionController extends Controller
         $this->ensureEnabled();
         $this->service->generateTitles(Auth::guard('admin')->user(), $contentProduction);
 
-        return back()->with('message', '已生成 5 个简体中文标题候选。');
+        return back()->with('message', '已生成 5 个简体中文标题候选；模型不可用时会明确标记为规则生成。');
     }
 
     public function selectTitle(
@@ -62,7 +62,7 @@ class ContentDirectionController extends Controller
         $this->ensureEnabled();
         $this->service->generateOutlines(Auth::guard('admin')->user(), $contentProduction);
 
-        return back()->with('message', '已生成两个可比较的大纲候选。');
+        return back()->with('message', '已生成两个可比较的大纲候选；模型不可用时会明确标记为规则生成。');
     }
 
     public function updateOutline(

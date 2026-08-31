@@ -19,6 +19,8 @@ use Illuminate\Validation\ValidationException;
 
 final class ContentDirectionService
 {
+    public function __construct(private readonly ContentDirectionAiGenerator $aiGenerator) {}
+
     /**
      * @param  array<string, mixed>  $attributes
      */
@@ -104,7 +106,7 @@ final class ContentDirectionService
 
         $topic = trim($production->topic);
         $angle = trim((string) data_get($brief->payload, 'content_angle'));
-        $candidates = [
+        $fallbackCandidates = [
             ['id' => (string) Str::uuid(), 'title' => $topic.'完整指南：从关键问题到行动方案', 'rationale' => '覆盖认知与行动意图'],
             ['id' => (string) Str::uuid(), 'title' => '如何做好'.$topic.'？方法、标准与常见误区', 'rationale' => '适合问题解决型检索'],
             ['id' => (string) Str::uuid(), 'title' => $topic.'深度解析：'.$this->shorten($angle, 22), 'rationale' => '突出已确认的内容角度'],
@@ -112,16 +114,19 @@ final class ContentDirectionService
             ['id' => (string) Str::uuid(), 'title' => $topic.'实践指南：可信资料、步骤与检查清单', 'rationale' => '强调证据和实操价值'],
         ];
 
+        $generation = $this->titlesFromAiOrFallback($production, $brief, $fallbackCandidates);
+
         return $this->createVersion(
             $admin,
             $production,
             ContentDirectionKind::Titles,
             [
-                'candidates' => $candidates,
+                'candidates' => $generation['candidates'],
                 'selected_id' => null,
                 'selected_title' => null,
                 'language' => 'zh_CN',
-                'generation_source' => 'local_fallback',
+                'generation_source' => $generation['source'],
+                'generation_note' => $generation['note'],
             ],
             [$brief->id],
             [ContentDirectionKind::Outlines],
@@ -202,16 +207,20 @@ final class ContentDirectionService
             ['h2', '总结'],
         ]), $evidenceIds);
 
+        $fallbackCandidates = [$candidateOne, $candidateTwo];
+        $generation = $this->outlinesFromAiOrFallback($production, $brief, $selectedTitle, $fallbackCandidates);
+
         return $this->createVersion(
             $admin,
             $production,
             ContentDirectionKind::Outlines,
             [
                 'title' => $selectedTitle,
-                'candidates' => [$candidateOne, $candidateTwo],
+                'candidates' => $generation['candidates'],
                 'selected_id' => null,
                 'language' => 'zh_CN',
-                'generation_source' => 'local_fallback',
+                'generation_source' => $generation['source'],
+                'generation_note' => $generation['note'],
             ],
             [$brief->id, $titles->id],
             [],
@@ -594,6 +603,64 @@ final class ContentDirectionService
                 'evidence_ids' => $evidenceIds,
             ], $headings),
         ];
+    }
+
+    /**
+     * @param  list<array{id:string,title:string,rationale:string}>  $fallbackCandidates
+     * @return array{candidates:list<array{id:string,title:string,rationale:string}>,source:string,note:string}
+     */
+    private function titlesFromAiOrFallback(
+        ContentProduction $production,
+        ContentDirectionVersion $brief,
+        array $fallbackCandidates,
+    ): array {
+        try {
+            $generated = $this->aiGenerator->titles($production, $brief);
+
+            return [
+                'candidates' => $generated['candidates'],
+                'source' => 'laravel_ai_sdk',
+                'note' => '已使用模型 '.$generated['model'].' 结合当前简报与证据摘要生成。',
+            ];
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return [
+                'candidates' => $fallbackCandidates,
+                'source' => 'local_fallback',
+                'note' => 'AI 暂不可用，已使用本地规则生成；请检查写作模型后重新生成。',
+            ];
+        }
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $fallbackCandidates
+     * @return array{candidates:list<array<string,mixed>>,source:string,note:string}
+     */
+    private function outlinesFromAiOrFallback(
+        ContentProduction $production,
+        ContentDirectionVersion $brief,
+        string $selectedTitle,
+        array $fallbackCandidates,
+    ): array {
+        try {
+            $generated = $this->aiGenerator->outlines($production, $brief, $selectedTitle);
+            $this->validateOutlinePayload(['candidates' => $generated['candidates']]);
+
+            return [
+                'candidates' => $generated['candidates'],
+                'source' => 'laravel_ai_sdk',
+                'note' => '已使用模型 '.$generated['model'].' 结合标题、简报与证据摘要生成。',
+            ];
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return [
+                'candidates' => $fallbackCandidates,
+                'source' => 'local_fallback',
+                'note' => 'AI 暂不可用，已使用本地规则生成；请检查写作模型后重新生成。',
+            ];
+        }
     }
 
     private function shorten(string $value, int $length): string
