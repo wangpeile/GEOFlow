@@ -7,13 +7,36 @@ use Closure;
 
 final class SystemHostResolver implements HostResolver
 {
-    /** @var Closure(string, int): array<int, array<string, mixed>> */
+    /** @var Closure(string): array<int, array<string, mixed>> */
     private readonly Closure $lookup;
 
-    /** @param (Closure(string, int): array<int, array<string, mixed>>)|null $lookup */
-    public function __construct(?Closure $lookup = null)
+    /**
+     * @param  (Closure(string): array<int, array<string, mixed>>)|null  $lookup
+     * @param  (Closure(string, int): array<int, array<string, mixed>>)|null  $dnsLookup
+     */
+    public function __construct(?Closure $lookup = null, ?Closure $dnsLookup = null)
     {
-        $this->lookup = $lookup ?? static fn (string $host, int $type): array => @dns_get_record($host, $type) ?: [];
+        if ($lookup instanceof Closure) {
+            $this->lookup = $lookup;
+
+            return;
+        }
+
+        $dnsLookup ??= static fn (string $host, int $type): array => @dns_get_record($host, $type) ?: [];
+        $this->lookup = static function (string $host) use ($dnsLookup): array {
+            $records = [
+                ...$dnsLookup($host, DNS_A),
+                ...$dnsLookup($host, DNS_AAAA),
+            ];
+
+            foreach ($records as $record) {
+                if (in_array(strtoupper((string) ($record['type'] ?? '')), ['A', 'AAAA'], true)) {
+                    return $records;
+                }
+            }
+
+            return [...$records, ...$dnsLookup($host, DNS_CNAME)];
+        };
     }
 
     public function resolve(string $host): array
@@ -33,7 +56,8 @@ final class SystemHostResolver implements HostResolver
 
         $visited[$host] = true;
         $addresses = [];
-        foreach ($this->lookupRecords($host) as $record) {
+        $aliases = [];
+        foreach (($this->lookup)($host) as $record) {
             $type = strtoupper((string) ($record['type'] ?? ''));
             if ($type === 'A' && filter_var($record['ip'] ?? null, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
                 $addresses[] = (string) $record['ip'];
@@ -42,31 +66,20 @@ final class SystemHostResolver implements HostResolver
             } elseif ($type === 'CNAME') {
                 $target = strtolower(rtrim((string) ($record['target'] ?? ''), '.'));
                 if ($target !== '') {
-                    $addresses = [...$addresses, ...$this->resolveHost($target, $visited, $depth + 1)];
+                    $aliases[] = $target;
                 }
             }
         }
 
-        return array_values(array_unique($addresses));
-    }
-
-    /** @return array<int, array<string, mixed>> */
-    private function lookupRecords(string $host): array
-    {
-        $records = [];
-
-        foreach ([DNS_A, DNS_AAAA, DNS_CNAME] as $type) {
-            try {
-                $result = ($this->lookup)($host, $type);
-            } catch (\Throwable) {
-                continue;
-            }
-
-            if (is_array($result)) {
-                $records = [...$records, ...$result];
-            }
+        // 系统解析器通常会在 CNAME 记录旁返回最终 A/AAAA 地址，直接使用可避免重复 DNS 查询。
+        if ($addresses !== []) {
+            return array_values(array_unique($addresses));
         }
 
-        return $records;
+        foreach (array_unique($aliases) as $target) {
+            $addresses = [...$addresses, ...$this->resolveHost($target, $visited, $depth + 1)];
+        }
+
+        return array_values(array_unique($addresses));
     }
 }

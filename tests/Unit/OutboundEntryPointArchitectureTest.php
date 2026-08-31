@@ -86,7 +86,13 @@ class OutboundEntryPointArchitectureTest extends TestCase
     #[Test]
     public function application_and_http_sdk_code_do_not_register_generic_http_middleware(): void
     {
-        foreach ([app_path(), base_path('vendor/prism-php/prism/src')] as $root) {
+        $roots = [app_path(), base_path('vendor/laravel/ai/src')];
+        $legacyPrismRoot = base_path('vendor/prism-php/prism/src');
+        if (is_dir($legacyPrismRoot)) {
+            $roots[] = $legacyPrismRoot;
+        }
+
+        foreach ($roots as $root) {
             foreach (File::allFiles($root) as $file) {
                 if ($file->getExtension() !== 'php') {
                     continue;
@@ -111,7 +117,7 @@ class OutboundEntryPointArchitectureTest extends TestCase
             app_path('Http/Controllers/Admin/AiModelController.php'),
             app_path('Services/GeoFlow/KnowledgeChunkSyncService.php'),
             app_path('Services/Admin/AdminUpdateMetadataService.php'),
-            app_path('Services/Admin/SystemUpdatePlanService.php'),
+            app_path('Services/GeoFlow/AnonymousUsageTelemetry.php'),
         ];
 
         foreach ($files as $file) {
@@ -148,6 +154,12 @@ class OutboundEntryPointArchitectureTest extends TestCase
             $this->assertStringContainsString($setting, $developmentSource);
             $this->assertStringContainsString("env('".$name."'", $configSource);
         }
+        $this->assertStringContainsString('GEOFLOW_OUTBOUND_RESPONSE_MAX_BYTES=52428800', $productionSource);
+        $this->assertStringContainsString('GEOFLOW_OUTBOUND_RESPONSE_MAX_BYTES=52428800', $developmentSource);
+        $this->assertMatchesRegularExpression(
+            "/env\(\s*'GEOFLOW_OUTBOUND_RESPONSE_MAX_BYTES',\s*env\('GEOFLOW_UPDATE_ARCHIVE_MAX_BYTES'/",
+            $configSource,
+        );
 
         foreach ([
             'URL_IMPORT_ALLOW_MIXED_DNS',

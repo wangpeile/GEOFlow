@@ -54,6 +54,26 @@ class SiteSettingsController extends Controller
                 ? $this->themeReplicationService->recent(3)
                 : collect(),
             'homeCarouselSlides' => $this->parseHomeCarouselSlides((string) ($settings['home_carousel_slides'] ?? '[]')),
+            'homepageEditorPage' => false,
+            'homepageModuleCount' => count($this->parseHomepageModules((string) ($settings['homepage_modules'] ?? '[]'))),
+            'articleDetailAds' => $this->parseArticleDetailAds((string) ($settings['article_detail_ads'] ?? '[]')),
+            'articleDetailTextAds' => $this->parseArticleDetailTextAds((string) ($settings['article_detail_text_ads'] ?? '[]')),
+        ]);
+    }
+
+    /**
+     * 独立的首页模块编排页面。
+     */
+    public function editHomepageModules(): View
+    {
+        $settings = $this->loadSettings();
+
+        return view('admin.site-settings.index', [
+            'pageTitle' => __('admin.site_settings.homepage.page_title'),
+            'activeMenu' => 'site_settings',
+            'adminSiteName' => AdminWeb::siteName(),
+            'settings' => $settings,
+            'homepageEditorPage' => true,
             'homepageModules' => $this->parseHomepageModules((string) ($settings['homepage_modules'] ?? '[]')),
             'homepageStyle' => $this->parseHomepageStyle((string) ($settings['homepage_style'] ?? '{}')),
             'homepageModuleTypes' => HomepageModuleBuilder::TYPES,
@@ -66,8 +86,6 @@ class SiteSettingsController extends Controller
             'homepageAlignments' => HomepageModuleBuilder::ALIGNMENTS,
             'homepagePresets' => HomepageModuleBuilder::presetIds(),
             'homepagePresetModes' => HomepageModuleBuilder::presetModes(),
-            'articleDetailAds' => $this->parseArticleDetailAds((string) ($settings['article_detail_ads'] ?? '[]')),
-            'articleDetailTextAds' => $this->parseArticleDetailTextAds((string) ($settings['article_detail_text_ads'] ?? '[]')),
         ]);
     }
 
@@ -94,6 +112,8 @@ class SiteSettingsController extends Controller
             'site_description' => ['nullable', 'string'],
             'site_keywords' => ['nullable', 'string', 'max:500'],
             'copyright_info' => ['nullable', 'string', 'max:500'],
+            'filing_info' => ['nullable', 'string', 'max:255'],
+            'filing_url' => ['nullable', 'url:http,https', 'max:500'],
             'site_logo' => ['nullable', 'url', 'max:500'],
             'site_favicon' => ['nullable', 'url', 'max:500'],
             'analytics_code' => ['nullable', 'string'],
@@ -140,6 +160,8 @@ class SiteSettingsController extends Controller
             'site_description' => trim((string) ($payload['site_description'] ?? '')),
             'site_keywords' => trim((string) ($payload['site_keywords'] ?? '')),
             'copyright_info' => trim((string) ($payload['copyright_info'] ?? '')),
+            'filing_info' => trim((string) ($payload['filing_info'] ?? '')),
+            'filing_url' => trim((string) ($payload['filing_url'] ?? '')),
             'site_logo' => trim((string) ($payload['site_logo'] ?? '')),
             'site_favicon' => trim((string) ($payload['site_favicon'] ?? '')),
             'analytics_code' => $canEditAnalytics
@@ -233,7 +255,7 @@ class SiteSettingsController extends Controller
 
         SiteSettingsBag::forget();
 
-        return redirect()->route('admin.site-settings.index')->with('message', __('admin.site_settings.homepage.message.saved'));
+        return redirect()->route('admin.site-settings.homepage-modules.edit')->with('message', __('admin.site_settings.homepage.message.saved'));
     }
 
     /**
@@ -273,7 +295,7 @@ class SiteSettingsController extends Controller
 
         SiteSettingsBag::forget();
 
-        return redirect()->route('admin.site-settings.index')->with('message', __('admin.site_settings.homepage.message.preset_applied'));
+        return redirect()->route('admin.site-settings.homepage-modules.edit')->with('message', __('admin.site_settings.homepage.message.preset_applied'));
     }
 
     /**
@@ -327,7 +349,7 @@ class SiteSettingsController extends Controller
 
         SiteSettingsBag::forget();
 
-        return redirect()->route('admin.site-settings.index')->with('message', __('admin.site_settings.homepage.message.imported'));
+        return redirect()->route('admin.site-settings.homepage-modules.edit')->with('message', __('admin.site_settings.homepage.message.imported'));
     }
 
     /**
@@ -414,6 +436,8 @@ class SiteSettingsController extends Controller
      *   site_description:string,
      *   site_keywords:string,
      *   copyright_info:string,
+     *   filing_info:string,
+     *   filing_url:string,
      *   site_logo:string,
      *   site_favicon:string,
      *   analytics_code:string,
@@ -438,6 +462,8 @@ class SiteSettingsController extends Controller
             'site_description' => '基于AI的智能内容生成与发布平台',
             'site_keywords' => 'AI内容生成,GEO优化,智能发布,内容管理',
             'copyright_info' => '© 2026 GEOFlow. All rights reserved.',
+            'filing_info' => '',
+            'filing_url' => 'https://beian.miit.gov.cn/',
             'site_logo' => '',
             'site_favicon' => '',
             'analytics_code' => '',
@@ -473,6 +499,8 @@ class SiteSettingsController extends Controller
             'site_description' => (string) $stored['site_description'],
             'site_keywords' => (string) $stored['site_keywords'],
             'copyright_info' => (string) $stored['copyright_info'],
+            'filing_info' => (string) $stored['filing_info'],
+            'filing_url' => (string) $stored['filing_url'],
             'site_logo' => (string) $stored['site_logo'],
             'site_favicon' => (string) $stored['site_favicon'],
             'analytics_code' => (string) $stored['analytics_code'],

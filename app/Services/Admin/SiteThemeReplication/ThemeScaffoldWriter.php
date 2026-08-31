@@ -210,7 +210,7 @@ BLADE;
         <a class="rep-brand" href="{{ route('site.home') }}">{{ $siteTitle ?? config('app.name') }}</a>
         <nav class="rep-nav">
             <a href="{{ route('site.home') }}" data-nav-item="home">{{ __('front.nav.home') }}</a>
-            <a href="{{ route('site.archive') }}">{{ __('site.archive_title') }}</a>
+            <a href="{{ route('site.about') }}">关于</a>
         </nav>
     </div>
 </header>
@@ -223,6 +223,7 @@ BLADE;
 <footer class="rep-footer">
     <div class="rep-shell">
         <div>{{ $siteTitle ?? config('app.name') }}</div>
+        @include('site.partials.footer-filing')
     </div>
 </footer>
 BLADE;

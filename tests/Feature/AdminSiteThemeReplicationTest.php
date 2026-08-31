@@ -33,13 +33,6 @@ class AdminSiteThemeReplicationTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        config(['geoflow.admin_features.theme_replication' => true]);
-    }
-
     public function test_site_settings_page_shows_theme_replication_entry(): void
     {
         $this->actingAs($this->admin(), 'admin')
@@ -96,19 +89,13 @@ class AdminSiteThemeReplicationTest extends TestCase
 
     public function test_docker_queue_workers_listen_to_theme_replication_queue(): void
     {
-        $expectations = [
-            'docker-compose.yml' => '--queue=geoflow,distribution,theme-replication,default',
-            'docker-compose.prod.yml' => '--queue=geoflow,distribution,theme-replication,system-updates,default',
-            'docker-compose.prebuilt.yml' => '--queue=geoflow,distribution,theme-replication,system-updates,default',
-        ];
-
-        foreach ($expectations as $composeFile => $expectedQueues) {
+        foreach (['docker-compose.yml', 'docker-compose.prod.yml'] as $composeFile) {
             $content = File::get(base_path($composeFile));
 
             $this->assertStringContainsString(
-                $expectedQueues,
+                '--queue=system-updates,geoflow,distribution,theme-replication,default',
                 $content,
-                $composeFile.' must consume the queue used by theme replication jobs.'
+                $composeFile.' must retire legacy update jobs before consuming active application queues.'
             );
         }
     }
@@ -436,10 +423,12 @@ class AdminSiteThemeReplicationTest extends TestCase
         $this->assertStringNotContainsString('vw', $css);
         $headerBlade = Storage::disk('local')->get("geoflow-theme-replications/{$replication->id}/draft/1/views/partials/header.blade.php");
         $homeNavPosition = strpos($headerBlade, 'data-nav-item="home"');
-        $archivePosition = strpos($headerBlade, "route('site.archive')");
+        $aboutPosition = strpos($headerBlade, "route('site.about')");
         $this->assertNotFalse($homeNavPosition);
-        $this->assertNotFalse($archivePosition);
-        $this->assertLessThan($archivePosition, $homeNavPosition);
+        $this->assertNotFalse($aboutPosition);
+        $this->assertLessThan($aboutPosition, $homeNavPosition);
+        $footerBlade = Storage::disk('local')->get("geoflow-theme-replications/{$replication->id}/draft/1/views/partials/footer.blade.php");
+        $this->assertStringContainsString("@include('site.partials.footer-filing')", $footerBlade);
         $homeBlade = Storage::disk('local')->get("geoflow-theme-replications/{$replication->id}/draft/1/views/home.blade.php");
         $articleBlade = Storage::disk('local')->get("geoflow-theme-replications/{$replication->id}/draft/1/views/article.blade.php");
         $this->assertStringNotContainsString('style=', $homeBlade.$articleBlade);

@@ -48,7 +48,7 @@
     <div class="px-4 sm:px-0">
         <div class="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex items-center space-x-4">
-                <a href="{{ route('admin.site-settings.index') }}" class="text-gray-400 hover:text-gray-600">
+                <a href="{{ route('admin.site-settings.index') }}" aria-label="{{ __('admin.common.back') }}" class="text-gray-400 hover:text-gray-600">
                     <i data-lucide="arrow-left" class="h-5 w-5"></i>
                 </a>
                 <div>
@@ -484,18 +484,18 @@
                     <p class="mt-2 text-sm leading-6 text-gray-600">{{ __('admin.theme_replication.section.lifecycle_desc') }}</p>
                     <div class="mt-5 space-y-3">
                         @if($replication->canBeArchived())
-                            <form method="POST" action="{{ route('admin.site-settings.theme-replications.archive', ['replicationId' => (int) $replication->id]) }}" onsubmit="return confirm(@js(__('admin.theme_replication.confirm.archive')))">
+                            <form method="POST" action="{{ route('admin.site-settings.theme-replications.archive', ['replicationId' => (int) $replication->id]) }}" data-admin-confirm-form data-admin-confirm-tone="warning" data-admin-confirm-title="{{ __('admin.theme_replication.confirm.archive') }}" data-admin-confirm-message="{{ __('admin.action_dialog.generic_impact') }}" data-admin-confirm-label="{{ __('admin.theme_replication.button.archive') }}">
                                 @csrf
-                                <button type="submit" class="inline-flex w-full items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                <button type="submit" class="inline-flex w-full items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" data-admin-confirm-submit disabled aria-disabled="true">
                                     <i data-lucide="archive" class="mr-2 h-4 w-4"></i>
                                     {{ __('admin.theme_replication.button.archive') }}
                                 </button>
                             </form>
                         @endif
                         @if($replication->canDeleteDrafts())
-                            <form method="POST" action="{{ route('admin.site-settings.theme-replications.delete-drafts', ['replicationId' => (int) $replication->id]) }}" onsubmit="return confirm(@js(__('admin.theme_replication.confirm.delete_drafts')))">
+                            <form method="POST" action="{{ route('admin.site-settings.theme-replications.delete-drafts', ['replicationId' => (int) $replication->id]) }}" data-admin-confirm-form data-admin-confirm-tone="danger" data-admin-confirm-title="{{ __('admin.theme_replication.confirm.delete_drafts') }}" data-admin-confirm-message="{{ __('admin.action_dialog.generic_impact') }}" data-admin-confirm-label="{{ __('admin.theme_replication.button.delete_drafts') }}">
                                 @csrf
-                                <button type="submit" class="inline-flex w-full items-center justify-center rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100">
+                                <button type="submit" class="inline-flex w-full items-center justify-center rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100" data-admin-confirm-submit disabled aria-disabled="true">
                                     <i data-lucide="trash-2" class="mr-2 h-4 w-4"></i>
                                     {{ __('admin.theme_replication.button.delete_drafts') }}
                                 </button>

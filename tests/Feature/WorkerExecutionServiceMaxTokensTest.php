@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Ai\Agents\MarkdownContentWriterAgent;
 use App\Models\AiModel;
+use App\Models\Task;
 use App\Services\GeoFlow\WorkerExecutionService;
 use App\Support\GeoFlow\ApiKeyCrypto;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,6 +23,7 @@ class WorkerExecutionServiceMaxTokensTest extends TestCase
         $agent = new MarkdownContentWriterAgent(maxTokens: 8192);
 
         $this->assertSame(['max_tokens' => 8192], $agent->providerOptions('deepseek'));
+        $this->assertSame(['max_tokens' => 8192], $agent->providerOptions('openai-compatible'));
         $this->assertSame(['max_tokens' => 8192], $agent->providerOptions('openrouter'));
         $this->assertSame(['max_output_tokens' => 8192], $agent->providerOptions('openai'));
         $this->assertSame(['max_output_tokens' => 8192], $agent->providerOptions(Lab::OpenAI));
@@ -40,10 +42,63 @@ class WorkerExecutionServiceMaxTokensTest extends TestCase
         $content = $this->generateContent($model, '写一篇文章。');
 
         $this->assertSame('# 标题'."\n\n".'完整正文。', $content);
+        $this->assertSame(1, (int) $model->fresh()->used_today);
+        $this->assertSame(1, (int) $model->fresh()->total_used);
 
         Http::assertSent(fn ($request): bool => $request->url() === 'https://ai.test/v1/chat/completions'
             && ($request['max_tokens'] ?? null) === 8192
             && ! array_key_exists('max_completion_tokens', (array) $request->data()));
+    }
+
+    public function test_generate_content_removes_citation_markers_and_preserves_legitimate_k_terms(): void
+    {
+        Http::fake([
+            'https://ai.test/v1/chat/completions' => Http::response($this->completion('结论 [K1]。Vitamin K2 与 K1 签证保留。')),
+        ]);
+
+        $content = $this->generateContent($this->createChatModel(), '写一篇文章。');
+
+        $this->assertSame('结论。Vitamin K2 与 K1 签证保留。', $content);
+    }
+
+    public function test_generate_content_releases_usage_for_an_empty_response(): void
+    {
+        Http::fake([
+            'https://ai.test/v1/chat/completions' => Http::response($this->completion('')),
+        ]);
+
+        $model = $this->createChatModel(['daily_limit' => 1]);
+
+        try {
+            $this->generateContent($model, '写一篇文章。');
+            $this->fail('Expected empty content to fail.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('AI返回空正文', $exception->getMessage());
+        }
+
+        $this->assertSame(0, (int) $model->fresh()->used_today);
+        $this->assertSame(0, (int) $model->fresh()->total_used);
+    }
+
+    public function test_generate_content_resets_a_previous_day_limit_before_calling_the_model(): void
+    {
+        $this->travelTo('2026-07-27 09:00:00');
+        Http::fake([
+            'https://ai.test/v1/chat/completions' => Http::response($this->completion('# 标题'."\n\n".'新一天正文。')),
+        ]);
+
+        $model = $this->createChatModel([
+            'daily_limit' => 1,
+            'used_today' => 1,
+            'usage_date' => '2026-07-26',
+        ]);
+
+        $content = $this->generateContent($model, '写一篇文章。');
+
+        $this->assertSame('# 标题'."\n\n".'新一天正文。', $content);
+        $this->assertSame('2026-07-27', $model->fresh()->usage_date?->toDateString());
+        $this->assertSame(1, (int) $model->fresh()->used_today);
+        $this->assertSame(1, (int) $model->fresh()->total_used);
     }
 
     public function test_generate_content_falls_back_to_config_default_max_tokens(): void
@@ -60,6 +115,20 @@ class WorkerExecutionServiceMaxTokensTest extends TestCase
 
         Http::assertSent(fn ($request): bool => $request->url() === 'https://ai.test/v1/chat/completions'
             && ($request['max_tokens'] ?? null) === 5000);
+    }
+
+    public function test_generate_content_uses_the_system_default_max_tokens(): void
+    {
+        Http::fake([
+            'https://ai.test/v1/chat/completions' => Http::response($this->completion('# 标题'."\n\n".'完整正文。')),
+        ]);
+
+        $model = $this->createChatModel(['max_tokens' => null]);
+
+        $this->generateContent($model, '写一篇文章。');
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://ai.test/v1/chat/completions'
+            && ($request['max_tokens'] ?? null) === 16384);
     }
 
     public function test_generate_content_logs_warning_when_output_looks_truncated(): void
@@ -114,6 +183,39 @@ class WorkerExecutionServiceMaxTokensTest extends TestCase
         $this->generateContent($model, '写一篇文章。');
 
         Log::shouldNotHaveReceived('warning');
+    }
+
+    public function test_smart_failover_uses_an_active_fallback_when_the_primary_model_is_inactive(): void
+    {
+        Http::fake([
+            'https://fallback.test/v1/chat/completions' => Http::response($this->completion('# 标题'."\n\n".'备用模型正文。')),
+        ]);
+
+        $primary = $this->createChatModel([
+            'name' => 'Inactive Primary',
+            'api_url' => 'https://primary.test',
+            'status' => 'inactive',
+        ]);
+        $fallback = $this->createChatModel([
+            'name' => 'Active Fallback',
+            'api_url' => 'https://fallback.test',
+            'failover_priority' => 1,
+        ]);
+        $task = new Task;
+        $task->forceFill([
+            'ai_model_id' => (int) $primary->id,
+            'model_selection_mode' => 'smart_failover',
+        ]);
+
+        $service = app(WorkerExecutionService::class);
+        $method = new ReflectionMethod($service, 'generateContentWithModelSelection');
+        $method->setAccessible(true);
+        $result = $method->invoke($service, $task, '写一篇文章。');
+
+        $this->assertSame((int) $fallback->id, (int) $result['model']->id);
+        $this->assertSame(['skipped', 'success'], array_column($result['attempts'], 'status'));
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://fallback.test/v1/chat/completions');
     }
 
     /**

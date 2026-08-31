@@ -12,11 +12,13 @@ use App\Models\DistributionChannel;
 use App\Models\DistributionChannelOperation;
 use App\Models\DistributionChannelSecret;
 use App\Models\DistributionLog;
+use App\Models\KnowledgeBase;
 use App\Models\Task;
 use App\Services\GeoFlow\DistributionChannelDeletionConfirmation;
 use App\Services\GeoFlow\DistributionChannelDeletionService;
 use App\Services\GeoFlow\DistributionChannelOperationLeaseService;
 use App\Services\GeoFlow\DistributionOrchestrator;
+use App\Services\GeoFlow\TaskLifecycleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -398,6 +400,38 @@ class DistributionChannelDeletionServiceTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    public function test_channel_refresh_cannot_requeue_after_task_deletion(): void
+    {
+        Queue::fake();
+        $channel = $this->channel();
+        $task = $this->task('local_and_distribution');
+        $task->distributionChannels()->attach($channel->id);
+        $article = $this->article($task);
+        $distribution = ArticleDistribution::query()->create([
+            'article_id' => (int) $article->id,
+            'distribution_channel_id' => (int) $channel->id,
+            'action' => 'publish',
+            'status' => 'failed',
+            'idempotency_key' => 'refresh-after-task-delete',
+        ]);
+        $deleted = false;
+        DB::listen(function ($query) use (&$deleted, $task): void {
+            $sql = strtolower((string) $query->sql);
+            preg_match('/\bfrom\s+"([^"]+)"/', $sql, $firstTable);
+            if (! $deleted && ($firstTable[1] ?? null) === 'articles') {
+                $deleted = true;
+                app(TaskLifecycleService::class)->deleteTask((int) $task->id);
+            }
+        });
+
+        $queuedCount = app(DistributionOrchestrator::class)->enqueueChannelContentRefresh($channel);
+
+        $this->assertTrue($deleted);
+        $this->assertSame(0, $queuedCount);
+        $this->assertSame('failed', $distribution->fresh()->status);
+        Queue::assertNothingPushed();
+    }
+
     public function test_manual_retry_does_not_overwrite_a_sending_distribution(): void
     {
         Queue::fake();
@@ -593,6 +627,29 @@ class DistributionChannelDeletionServiceTest extends TestCase
         ])->save();
 
         $this->assertSame($revision, $orchestrator->taskRevision($task->fresh()));
+    }
+
+    public function test_task_revision_changes_with_quality_mode_and_ordered_knowledge_bases(): void
+    {
+        $task = $this->task('local_and_distribution');
+        $first = KnowledgeBase::query()->create(['name' => '依据一', 'content' => '正文一']);
+        $second = KnowledgeBase::query()->create(['name' => '依据二', 'content' => '正文二']);
+        $task->knowledgeBases()->sync([
+            $first->id => ['sort_order' => 0],
+            $second->id => ['sort_order' => 1],
+        ]);
+        $orchestrator = app(DistributionOrchestrator::class);
+        $revision = $orchestrator->taskRevision($task->fresh());
+
+        $task->forceFill(['ai_quality_retrieval_mode' => 'knowledge_broad'])->save();
+        $modeRevision = $orchestrator->taskRevision($task->fresh());
+        $this->assertNotSame($revision, $modeRevision);
+
+        $task->knowledgeBases()->sync([
+            $second->id => ['sort_order' => 0],
+            $first->id => ['sort_order' => 1],
+        ]);
+        $this->assertNotSame($modeRevision, $orchestrator->taskRevision($task->fresh()));
     }
 
     private function channel(array $attributes = []): DistributionChannel

@@ -6,7 +6,7 @@
             [
                 'title' => __('admin.site_settings.group_basic'),
                 'desc' => __('admin.site_settings.group_basic_desc'),
-                'columns' => 'md:grid-cols-2',
+                'columns' => 'lg:grid-cols-3',
                 'items' => [
                     [
                         'title' => __('admin.site_settings.section_basic'),
@@ -25,6 +25,15 @@
                         'icon' => 'layout-template',
                         'iconClass' => 'bg-indigo-50 text-indigo-600 ring-indigo-100',
                         'action' => __('admin.site_settings.open_section'),
+                    ],
+                    [
+                        'title' => __('admin.site_settings.homepage.section_title'),
+                        'desc' => __('admin.site_settings.homepage.configured_count', ['count' => $homepageModuleCount ?? 0]),
+                        'href' => route('admin.site-settings.homepage-modules.edit'),
+                        'target' => null,
+                        'icon' => 'panels-top-left',
+                        'iconClass' => 'bg-cyan-50 text-cyan-700 ring-cyan-100',
+                        'action' => __('admin.site_settings.homepage.open_editor'),
                     ],
                 ],
             ],
@@ -64,52 +73,111 @@
             ],
         ],
     ];
+
+    if (auth('admin')->user()?->canManageProtectedWorkflows()) {
+        $siteSettingsGroupRows[] = [
+            [
+                'title' => __('admin.ui_v3.system_management'),
+                'desc' => __('admin.ui_v3.system_management_hint'),
+                'columns' => 'lg:grid-cols-3',
+                'items' => [
+                    [
+                        'title' => __('admin.ui_v3.users_permissions'),
+                        'desc' => __('admin.ui_v3.user_settings_hint'),
+                        'href' => route('admin.admin-users.index'),
+                        'target' => null,
+                        'icon' => 'users-round',
+                        'iconClass' => 'bg-blue-50 text-blue-600 ring-blue-100',
+                        'action' => __('admin.site_settings.manage_module'),
+                    ],
+                    [
+                        'title' => __('admin.ui_v3.security_audit'),
+                        'desc' => __('admin.ui_v3.audit_settings_hint'),
+                        'href' => route('admin.admin-activity-logs'),
+                        'target' => null,
+                        'icon' => 'shield-check',
+                        'iconClass' => 'bg-emerald-50 text-emerald-600 ring-emerald-100',
+                        'action' => __('admin.site_settings.manage_module'),
+                    ],
+                    [
+                        'title' => __('admin.ui_v3.system_updates'),
+                        'desc' => __('admin.ui_v3.system_updates_hint'),
+                        'href' => route('admin.system-updates.index'),
+                        'target' => null,
+                        'icon' => 'refresh-cw',
+                        'iconClass' => 'bg-violet-50 text-violet-600 ring-violet-100',
+                        'action' => __('admin.site_settings.manage_module'),
+                    ],
+                ],
+            ],
+        ];
+    }
 @endphp
 
 @section('content')
-    <div class="px-4 sm:px-0">
-        <div class="mb-8">
-            <h1 class="text-2xl font-bold text-gray-900">{{ __('admin.site_settings.page_title') }}</h1>
-            <p class="mt-1 text-sm text-gray-600">{{ __('admin.site_settings.page_subtitle') }}</p>
-        </div>
+    @php
+        $showHomepageEditor = $homepageEditorPage ?? false;
+    @endphp
 
-        <div class="mb-8 space-y-6">
-            @foreach ($siteSettingsGroupRows as $settingsGroupRow)
-                <div class="{{ count($settingsGroupRow) > 1 ? 'grid grid-cols-1 gap-6 lg:grid-cols-2' : 'space-y-6' }}">
-                    @foreach ($settingsGroupRow as $settingsGroup)
-                        <section>
-                            <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                                <div>
-                                    <h2 class="text-sm font-semibold text-gray-900">{{ $settingsGroup['title'] }}</h2>
-                                    <p class="mt-1 text-sm leading-6 text-gray-500">{{ $settingsGroup['desc'] }}</p>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-1 gap-4 {{ $settingsGroup['columns'] }}">
-                                @foreach ($settingsGroup['items'] as $settingsItem)
-                                    <a href="{{ $settingsItem['href'] }}"
-                                       @if ($settingsItem['target'] !== null) data-site-settings-target="{{ $settingsItem['target'] }}" @endif
-                                       class="group flex min-h-36 flex-col justify-between rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                                        <span class="flex items-start gap-4">
-                                            <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md ring-1 {{ $settingsItem['iconClass'] }}">
-                                                <i data-lucide="{{ $settingsItem['icon'] }}" class="h-5 w-5"></i>
-                                            </span>
-                                            <span class="min-w-0">
-                                                <span class="block text-base font-semibold text-gray-900">{{ $settingsItem['title'] }}</span>
-                                                <span class="mt-1 block text-sm leading-6 text-gray-600">{{ $settingsItem['desc'] }}</span>
-                                            </span>
-                                        </span>
-                                        <span class="mt-4 inline-flex items-center text-sm font-semibold text-blue-700">
-                                            {{ $settingsItem['action'] }}
-                                            <i data-lucide="arrow-right" class="ml-1.5 h-4 w-4 transition-transform group-hover:translate-x-0.5"></i>
-                                        </span>
-                                    </a>
-                                @endforeach
-                            </div>
-                        </section>
-                    @endforeach
+    <div class="px-4 sm:px-0">
+        @if ($showHomepageEditor)
+            <div class="mb-8">
+                <a href="{{ route('admin.site-settings.index') }}" class="inline-flex min-h-10 items-center text-sm font-semibold text-gray-600 transition-colors hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    <i data-lucide="arrow-left" class="mr-2 h-4 w-4" aria-hidden="true"></i>
+                    {{ __('admin.site_settings.homepage.back_to_settings') }}
+                </a>
+                <div class="mt-4">
+                    <div class="inline-flex items-center rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-cyan-100">
+                        <i data-lucide="panels-top-left" class="mr-1.5 h-3.5 w-3.5" aria-hidden="true"></i>
+                        {{ __('admin.site_settings.homepage.badge') }}
+                    </div>
+                    <h1 id="homepage-editor-title" class="mt-3 text-2xl font-bold text-gray-900">{{ __('admin.site_settings.homepage.page_title') }}</h1>
+                    <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-600">{{ __('admin.site_settings.homepage.page_subtitle') }}</p>
                 </div>
-            @endforeach
-        </div>
+            </div>
+        @else
+            <div class="mb-8">
+                <h1 class="text-2xl font-bold text-gray-900">{{ __('admin.site_settings.page_title') }}</h1>
+                <p class="mt-1 text-sm text-gray-600">{{ __('admin.site_settings.page_subtitle') }}</p>
+            </div>
+
+            <div class="mb-8 space-y-6">
+                @foreach ($siteSettingsGroupRows as $settingsGroupRow)
+                    <div class="{{ count($settingsGroupRow) > 1 ? 'grid grid-cols-1 gap-6 lg:grid-cols-2' : 'space-y-6' }}">
+                        @foreach ($settingsGroupRow as $settingsGroup)
+                            <section>
+                                <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <h2 class="text-sm font-semibold text-gray-900">{{ $settingsGroup['title'] }}</h2>
+                                        <p class="mt-1 text-sm leading-6 text-gray-500">{{ $settingsGroup['desc'] }}</p>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 gap-4 {{ $settingsGroup['columns'] }}">
+                                    @foreach ($settingsGroup['items'] as $settingsItem)
+                                        <a href="{{ $settingsItem['href'] }}"
+                                           @if ($settingsItem['target'] !== null) data-site-settings-target="{{ $settingsItem['target'] }}" @endif
+                                           class="group flex min-h-36 flex-col justify-between rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-[transform,border-color,box-shadow] hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                                            <span class="flex items-start gap-4">
+                                                <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md ring-1 {{ $settingsItem['iconClass'] }}">
+                                                    <i data-lucide="{{ $settingsItem['icon'] }}" class="h-5 w-5"></i>
+                                                </span>
+                                                <span class="min-w-0">
+                                                    <span class="block text-base font-semibold text-gray-900">{{ $settingsItem['title'] }}</span>
+                                                    <span class="mt-1 block text-sm leading-6 text-gray-600">{{ $settingsItem['desc'] }}</span>
+                                                </span>
+                                            </span>
+                                            <span class="mt-4 inline-flex items-center text-sm font-semibold text-blue-700">
+                                                {{ $settingsItem['action'] }}
+                                                <i data-lucide="arrow-right" class="ml-1.5 h-4 w-4 transition-transform group-hover:translate-x-0.5"></i>
+                                            </span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </section>
+                        @endforeach
+                    </div>
+                @endforeach
+            </div>
 
         <details id="site-settings-basic" class="mb-6 bg-white shadow rounded-lg overflow-hidden group">
             <summary class="px-6 py-5 border-b border-gray-200 flex items-center justify-between gap-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
@@ -188,6 +256,26 @@
                                value="{{ $settings['copyright_info'] }}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                placeholder="© 2024 Site Name. All rights reserved.">
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <div>
+                            <label for="filing_info" class="block text-sm font-medium text-gray-700 mb-2">{{ __('admin.site_settings.field_filing_info') }}</label>
+                            <input id="filing_info" type="text" name="filing_info"
+                                   value="{{ old('filing_info', $settings['filing_info']) }}"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="{{ __('admin.site_settings.placeholder_filing_info') }}">
+                        </div>
+
+                        <div>
+                            <label for="filing_url" class="block text-sm font-medium text-gray-700 mb-2">{{ __('admin.site_settings.field_filing_url') }}</label>
+                            <input id="filing_url" type="url" name="filing_url"
+                                   value="{{ old('filing_url', $settings['filing_url']) }}"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="https://beian.miit.gov.cn/">
+                        </div>
+
+                        <p class="-mt-3 text-xs leading-5 text-gray-500 md:col-span-2">{{ __('admin.site_settings.filing_help') }}</p>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -316,21 +404,27 @@
                 </form>
             </div>
         </details>
+        @endif
 
-        <details id="site-settings-theme" class="mb-6 bg-white shadow rounded-lg overflow-hidden group">
-            <summary class="px-6 py-5 border-b border-gray-200 flex items-center justify-between gap-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                <div class="flex min-w-0 items-start gap-4">
-                    <span class="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 sm:inline-flex">
-                        <i data-lucide="layout-template" class="h-5 w-5"></i>
-                    </span>
-                    <div class="min-w-0 max-w-3xl">
-                        <h3 class="text-lg font-medium text-gray-900">{{ __('admin.site_settings.theme.section_title') }}</h3>
-                        <p class="mt-1 text-sm leading-6 text-gray-600">{{ __('admin.site_settings.module_theme_desc') }}</p>
+        @if ($showHomepageEditor)
+            <section class="mb-6 overflow-hidden rounded-lg bg-white shadow" aria-labelledby="homepage-editor-title">
+        @else
+            <details id="site-settings-theme" class="mb-6 overflow-hidden rounded-lg bg-white shadow group">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 border-b border-gray-200 px-6 py-5 [&::-webkit-details-marker]:hidden">
+                    <div class="flex min-w-0 items-start gap-4">
+                        <span class="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 sm:inline-flex">
+                            <i data-lucide="layout-template" class="h-5 w-5"></i>
+                        </span>
+                        <div class="min-w-0 max-w-3xl">
+                            <h3 class="text-lg font-medium text-gray-900">{{ __('admin.site_settings.theme.section_title') }}</h3>
+                            <p class="mt-1 text-sm leading-6 text-gray-600">{{ __('admin.site_settings.module_theme_desc') }}</p>
+                        </div>
                     </div>
-                </div>
-                <i data-lucide="chevron-down" class="w-5 h-5 shrink-0 text-gray-400 transition-transform duration-200 group-open:rotate-180" aria-hidden="true"></i>
-            </summary>
+                    <i data-lucide="chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition-transform duration-200 group-open:rotate-180" aria-hidden="true"></i>
+                </summary>
+        @endif
             <div class="px-6 py-6">
+                @if ($showHomepageEditor)
                 @php
                     $homepageFormModules = old('homepage_modules', $homepageModules ?? []);
                     $homepageFormStyle = old('homepage_style', $homepageStyle ?? []);
@@ -364,7 +458,7 @@
                                 </select>
                             </div>
                             <div class="flex items-end">
-                                <button type="submit" class="inline-flex w-full items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                                <button type="submit" class="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
                                     <i data-lucide="wand-sparkles" class="mr-2 h-4 w-4"></i>
                                     {{ __('admin.site_settings.homepage.preset_apply') }}
                                 </button>
@@ -397,7 +491,7 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <button type="submit" class="inline-flex w-full items-center justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                            <button type="submit" class="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                                 <i data-lucide="upload" class="mr-2 h-4 w-4"></i>
                                 {{ __('admin.site_settings.homepage.import_apply') }}
                             </button>
@@ -413,15 +507,14 @@
                                 <i data-lucide="layout-dashboard" class="mr-1.5 h-3.5 w-3.5"></i>
                                 {{ __('admin.site_settings.homepage.badge') }}
                             </div>
-                            <h4 class="mt-3 text-base font-semibold text-gray-900">{{ __('admin.site_settings.homepage.section_title') }}</h4>
-                            <p class="mt-1 text-sm leading-6 text-gray-600">{{ __('admin.site_settings.homepage.section_desc') }}</p>
+                            <p class="mt-3 max-w-3xl text-sm leading-6 text-gray-600">{{ __('admin.site_settings.homepage.section_desc') }}</p>
                         </div>
                         <div class="flex shrink-0 flex-wrap gap-2">
-                            <button type="button" id="add-homepage-module" class="inline-flex items-center rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">
+                            <button type="button" id="add-homepage-module" class="inline-flex min-h-10 items-center rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">
                                 <i data-lucide="plus" class="mr-2 h-4 w-4"></i>
                                 {{ __('admin.site_settings.homepage.add_module') }}
                             </button>
-                            <button type="submit" class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                            <button type="submit" class="inline-flex min-h-10 items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                                 <i data-lucide="save" class="mr-2 h-4 w-4"></i>
                                 {{ __('admin.site_settings.homepage.save') }}
                             </button>
@@ -488,7 +581,7 @@
                                         <div class="text-sm font-semibold text-gray-900">{{ __('admin.site_settings.homepage.module_title', ['index' => $index + 1]) }}</div>
                                         <div class="mt-1 text-xs text-gray-500">{{ __('admin.site_settings.homepage.module_desc') }}</div>
                                     </div>
-                                    <button type="button" class="remove-homepage-module inline-flex items-center rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
+                                    <button type="button" class="remove-homepage-module inline-flex min-h-10 items-center rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
                                         <i data-lucide="trash-2" class="mr-2 h-4 w-4"></i>
                                         {{ __('admin.button.delete') }}
                                     </button>
@@ -616,6 +709,7 @@
                     </div>
                 </form>
 
+                @else
                 <form method="POST" action="{{ route('admin.site-settings.theme') }}" class="space-y-5">
                     @csrf
 
@@ -706,9 +800,15 @@
                         </button>
                     </div>
                 </form>
+                @endif
             </div>
-        </details>
+        @if ($showHomepageEditor)
+            </section>
+        @else
+            </details>
+        @endif
 
+        @unless ($showHomepageEditor)
         <details id="site-settings-ads" class="mb-6 bg-white shadow rounded-lg overflow-hidden group">
             <summary class="px-6 py-5 border-b border-gray-200 flex items-center justify-between gap-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                 <div class="flex min-w-0 items-start gap-4">
@@ -967,6 +1067,7 @@
                 </form>
             </div>
         </details>
+        @endunless
     </div>
 @endsection
 
@@ -994,6 +1095,7 @@
         });
     </script>
 
+    @if ($showHomepageEditor)
     <template id="homepage-module-template">
         <div class="homepage-module-item rounded-2xl border border-gray-200 bg-white p-4" data-homepage-module-index="__INDEX__">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1001,7 +1103,7 @@
                     <div class="text-sm font-semibold text-gray-900">{{ __('admin.site_settings.homepage.module_title', ['index' => '__NUMBER__']) }}</div>
                     <div class="mt-1 text-xs text-gray-500">{{ __('admin.site_settings.homepage.module_desc') }}</div>
                 </div>
-                <button type="button" class="remove-homepage-module inline-flex items-center rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
+                <button type="button" class="remove-homepage-module inline-flex min-h-10 items-center rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
                     <i data-lucide="trash-2" class="mr-2 h-4 w-4"></i>
                     {{ __('admin.button.delete') }}
                 </button>
@@ -1178,9 +1280,8 @@
                 bindRemove(item);
                 refreshState();
 
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                }
+                if (window.GeoFlowAdminUi?.refreshIcons) window.GeoFlowAdminUi.refreshIcons(item);
+                else window.lucide?.createIcons?.();
             });
 
             list.querySelectorAll('.homepage-module-item').forEach(bindRemove);
@@ -1188,6 +1289,7 @@
         });
     </script>
 
+    @else
     <template id="article-ad-template">
         <div class="article-ad-item rounded-2xl border border-gray-200 bg-gray-50/70 p-5" data-ad-index="__INDEX__">
             <div class="flex items-center justify-between gap-4">
@@ -1249,7 +1351,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            if (typeof lucide !== 'undefined') {
+            if (! window.GeoFlowAdminUi?.refreshIcons && typeof lucide !== 'undefined') {
                 lucide.createIcons();
             }
 
@@ -1294,9 +1396,8 @@
                 bindRemove(adItem);
                 refreshState();
 
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                }
+                if (window.GeoFlowAdminUi?.refreshIcons) window.GeoFlowAdminUi.refreshIcons(adItem);
+                else window.lucide?.createIcons?.();
             });
 
             adList.querySelectorAll('.article-ad-item').forEach(bindRemove);
@@ -1524,9 +1625,8 @@
                     bindColorPicker(linkItem);
                     refreshTextAdLinks(scope);
 
-                    if (typeof lucide !== 'undefined') {
-                        lucide.createIcons();
-                    }
+                    if (window.GeoFlowAdminUi?.refreshIcons) window.GeoFlowAdminUi.refreshIcons(linkItem);
+                    else window.lucide?.createIcons?.();
                 });
             }
 
@@ -1578,9 +1678,8 @@
                 bindTextAdModule(textAdItem);
                 refreshTextAdState();
 
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                }
+                if (window.GeoFlowAdminUi?.refreshIcons) window.GeoFlowAdminUi.refreshIcons(textAdItem);
+                else window.lucide?.createIcons?.();
             });
 
             textAdList.querySelectorAll('.article-text-ad-item').forEach(function (item) {
@@ -1589,4 +1688,5 @@
             refreshTextAdState();
         });
     </script>
+    @endif
 @endpush

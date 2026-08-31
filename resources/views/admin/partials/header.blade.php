@@ -6,133 +6,111 @@
     $updateNotification = is_array($adminUpdateNotificationPayload ?? null) ? $adminUpdateNotificationPayload : [];
     $updateState = is_array($updateNotification['state'] ?? null) ? $updateNotification['state'] : [];
     $updateLinks = is_array($updateNotification['links'] ?? null) ? $updateNotification['links'] : [];
+    $releaseNotice = is_array($updateNotification['release_notice'] ?? null) ? $updateNotification['release_notice'] : [];
     $hasVersionUpdate = !empty($updateState['is_update_available']);
     $isUpdateCenterEnabled = (bool) config('geoflow.update_center_enabled', true);
-    $visibleAdminFeatures = (array) config('geoflow.admin_features', []);
-    $showAnalyticsAndLeads = (bool) ($visibleAdminFeatures['analytics_and_leads'] ?? false);
-    $showUpdateCenter = (bool) ($visibleAdminFeatures['update_center'] ?? false);
-    $showApiTokens = (bool) ($visibleAdminFeatures['api_tokens'] ?? false);
     $localeForChangelog = app()->getLocale() === 'en' ? 'en' : 'zh-CN';
-    $updatePayload = is_array($updateState['payload'] ?? null) ? $updateState['payload'] : [];
-    $updateSummary = (string) ($localeForChangelog === 'en'
-        ? ($updatePayload['summary_en'] ?? '')
-        : ($updatePayload['summary_zh'] ?? ''));
+    $updateSummary = (string) ($releaseNotice['summary'] ?? '');
     $changelogLinks = is_array($updateLinks['changelog'] ?? null) ? $updateLinks['changelog'] : [];
     $notificationChangelogUrl = (string) ($changelogLinks[$localeForChangelog] ?? $changelogLinks['zh-CN'] ?? 'https://github.com/yaojingang/GEOFlow/blob/main/docs/CHANGELOG.md');
     $notificationGithubUrl = (string) ($updateLinks['github'] ?? 'https://github.com/yaojingang/GEOFlow');
-    $notificationUpdateCenterUrl = $isUpdateCenterEnabled && $showUpdateCenter && $isSuperAdmin ? \App\Support\AdminWeb::routePath('admin.system-updates.index') : '';
+    $notificationUpdateCenterUrl = $isUpdateCenterEnabled && $isSuperAdmin ? \App\Support\AdminWeb::routePath('admin.system-updates.index') : '';
     $notificationStatus = (string) ($updateState['status'] ?? 'disabled');
     $menu = [
         'dashboard' => ['route' => 'admin.dashboard', 'name' => __('admin.nav.dashboard')],
-        'content_assets' => ['route' => 'admin.content-assets.index', 'name' => '内容资产'],
-        'content_production' => ['route' => 'admin.content-productions.index', 'name' => '内容生产'],
-        'content_center' => ['route' => 'admin.content-center.index', 'name' => '内容中心'],
-        'distribution_center' => ['route' => 'admin.distribution-center.index', 'name' => '分发中心'],
-        'geo_optimization' => ['route' => 'admin.content-operations.index', 'name' => 'GEO 优化'],
+        'analytics' => ['route' => 'admin.analytics', 'name' => __('admin.nav.analytics')],
+        'tasks' => ['route' => 'admin.tasks.index', 'name' => __('admin.nav.tasks')],
+        'distribution' => ['route' => 'admin.distribution.index', 'name' => __('admin.nav.distribution')],
+        'articles' => ['route' => 'admin.articles.index', 'name' => __('admin.nav.articles')],
+        'materials' => ['route' => 'admin.materials.index', 'name' => __('admin.nav.materials')],
         'ai_config' => ['route' => 'admin.ai.configurator', 'name' => __('admin.nav.ai_config')],
         'site_settings' => ['route' => 'admin.site-settings.index', 'name' => __('admin.nav.site_settings')],
     ];
-    if ($showAnalyticsAndLeads) {
-        $menu = array_slice($menu, 0, 1, true)
-            + ['analytics' => ['route' => 'admin.analytics', 'name' => __('admin.nav.analytics')]]
-            + array_slice($menu, 1, null, true);
-    }
     if (!$isSuperAdmin) {
-        unset($menu['content_assets'], $menu['content_production'], $menu['content_center'], $menu['distribution_center'], $menu['geo_optimization']);
-    }
-    if (!config('geoflow.content_production_pipeline_enabled', false)) {
-        unset($menu['content_assets'], $menu['content_production'], $menu['content_center'], $menu['distribution_center'], $menu['geo_optimization']);
+        unset($menu['distribution']);
     }
     if ($isSuperAdmin) {
         $menu['admin_users'] = ['route' => 'admin.admin-users.index', 'name' => __('admin.nav.admin_users')];
     }
     $subMap = [
         'admin.analytics' => 'analytics',
+        'admin.analytics.content' => 'analytics',
+        'admin.analytics.traffic' => 'analytics',
+        'admin.analytics.ai-visibility' => 'analytics',
+        'admin.analytics.leads' => 'analytics',
+        'admin.analytics.distribution' => 'analytics',
         'admin.system-updates.index' => 'dashboard',
         'admin.system-updates.check' => 'dashboard',
-        'admin.system-updates.plan' => 'dashboard',
-        'admin.system-updates.backup' => 'dashboard',
-        'admin.tasks.create' => 'content_production',
-        'admin.tasks.edit' => 'content_production',
-        'admin.distribution.index' => 'distribution_center',
-        'admin.distribution.create' => 'distribution_center',
-        'admin.distribution.store' => 'distribution_center',
-        'admin.distribution.edit' => 'distribution_center',
-        'admin.distribution.update' => 'distribution_center',
-        'admin.distribution.show' => 'distribution_center',
-        'admin.distribution.jobs' => 'distribution_center',
-        'admin.distribution.retry' => 'distribution_center',
-        'admin.distribution.health' => 'distribution_center',
-        'admin.distribution.pause' => 'distribution_center',
-        'admin.distribution.activate' => 'distribution_center',
-        'admin.articles.create' => 'content_center',
-        'admin.articles.edit' => 'content_center',
-        'admin.content-center.index' => 'content_center',
-        'admin.content-assets.index' => 'content_assets',
-        'admin.content-groups.index' => 'distribution_center',
-        'admin.distribution-center.index' => 'distribution_center',
-        'admin.content-groups.store' => 'distribution_center',
-        'admin.content-groups.show' => 'distribution_center',
-        'admin.content-groups.variants.generate' => 'distribution_center',
-        'admin.content-groups.variants.regenerate' => 'distribution_center',
-        'admin.content-productions.index' => 'content_production',
-        'admin.content-productions.create' => 'content_production',
-        'admin.content-productions.show' => 'content_production',
-        'admin.content-topics.index' => 'content_production',
-        'admin.content-topics.create' => 'content_production',
-        'admin.content-topics.show' => 'content_production',
-        'admin.content-topics.edit' => 'content_production',
-        'admin.content-automations.index' => 'content_production',
-        'admin.content-automations.edit' => 'content_production',
-        'admin.content-operations.index' => 'geo_optimization',
-        'admin.content-platform-specifications.index' => 'distribution_center',
-        'admin.content-platform-specifications.edit' => 'distribution_center',
-        'admin.writing-rules.index' => 'content_assets',
-        'admin.writing-rules.create' => 'content_assets',
-        'admin.writing-rules.show' => 'content_assets',
-        'admin.writing-rules.edit' => 'content_assets',
-        'admin.article-types.index' => 'content_assets',
-        'admin.article-types.create' => 'content_assets',
-        'admin.article-types.edit' => 'content_assets',
-        'admin.categories.index' => 'content_assets',
-        'admin.categories.create' => 'content_assets',
-        'admin.categories.edit' => 'content_assets',
-        'admin.authors.index' => 'content_assets',
-        'admin.authors.create' => 'content_assets',
-        'admin.authors.edit' => 'content_assets',
-        'admin.authors.detail' => 'content_assets',
-        'admin.keyword-libraries.index' => 'content_assets',
-        'admin.keyword-libraries.create' => 'content_assets',
-        'admin.keyword-libraries.edit' => 'content_assets',
-        'admin.keyword-libraries.detail' => 'content_assets',
-        'admin.keyword-libraries.detail.update' => 'content_assets',
-        'admin.keyword-libraries.keywords.store' => 'content_assets',
-        'admin.keyword-libraries.keywords.delete' => 'content_assets',
-        'admin.keyword-libraries.import' => 'content_assets',
-        'admin.title-libraries.index' => 'content_assets',
-        'admin.title-libraries.create' => 'content_assets',
-        'admin.title-libraries.edit' => 'content_assets',
-        'admin.title-libraries.detail' => 'content_assets',
-        'admin.title-libraries.titles.store' => 'content_assets',
-        'admin.title-libraries.titles.delete' => 'content_assets',
-        'admin.title-libraries.import' => 'content_assets',
-        'admin.title-libraries.ai-generate' => 'content_assets',
-        'admin.title-libraries.ai-generate.submit' => 'content_assets',
-        'admin.image-libraries.index' => 'content_assets',
-        'admin.image-libraries.create' => 'content_assets',
-        'admin.image-libraries.edit' => 'content_assets',
-        'admin.image-libraries.detail' => 'content_assets',
-        'admin.image-libraries.images.upload' => 'content_assets',
-        'admin.image-libraries.images.delete' => 'content_assets',
-        'admin.image-libraries.detail.update' => 'content_assets',
-        'admin.knowledge-bases.index' => 'content_assets',
-        'admin.knowledge-bases.create' => 'content_assets',
-        'admin.knowledge-bases.edit' => 'content_assets',
-        'admin.knowledge-bases.detail' => 'content_assets',
-        'admin.knowledge-bases.upload' => 'content_assets',
-        'admin.knowledge-bases.detail.update' => 'content_assets',
-        'admin.url-import' => 'content_assets',
+		'admin.system-updates.updater.prepare' => 'dashboard',
+		'admin.system-updates.updater.download' => 'dashboard',
+		'admin.system-updates.updater.update' => 'dashboard',
+		'admin.system-updates.updater.backup' => 'dashboard',
+		'admin.system-updates.updater.rollback' => 'dashboard',
+		'admin.system-updates.updater.verify' => 'dashboard',
+		'admin.system-updates.runs.show' => 'dashboard',
+		'admin.system-updates.backups.show' => 'dashboard',
+        'admin.tasks.create' => 'tasks',
+        'admin.tasks.edit' => 'tasks',
+        'admin.distribution.index' => 'distribution',
+        'admin.distribution.create' => 'distribution',
+        'admin.distribution.store' => 'distribution',
+        'admin.distribution.edit' => 'distribution',
+        'admin.distribution.update' => 'distribution',
+        'admin.distribution.show' => 'distribution',
+        'admin.distribution.jobs' => 'distribution',
+        'admin.distribution.retry' => 'distribution',
+        'admin.distribution.health' => 'distribution',
+        'admin.distribution.pause' => 'distribution',
+        'admin.distribution.activate' => 'distribution',
+        'admin.distribution.rotate-secret' => 'distribution',
+        'admin.articles.create' => 'articles',
+        'admin.articles.edit' => 'articles',
+        'admin.manual-publications.index' => 'articles',
+        'admin.manual-publications.create' => 'articles',
+        'admin.manual-publications.show' => 'articles',
+        'admin.manual-publications.edit' => 'articles',
+        'admin.manual-publications.settings.index' => 'articles',
+        'admin.categories.index' => 'materials',
+        'admin.categories.create' => 'materials',
+        'admin.categories.edit' => 'materials',
+        'admin.authors.index' => 'materials',
+        'admin.authors.create' => 'materials',
+        'admin.authors.edit' => 'materials',
+        'admin.authors.detail' => 'materials',
+        'admin.keyword-libraries.index' => 'materials',
+        'admin.keyword-libraries.create' => 'materials',
+        'admin.keyword-libraries.edit' => 'materials',
+        'admin.keyword-libraries.detail' => 'materials',
+        'admin.keyword-libraries.detail.update' => 'materials',
+        'admin.keyword-libraries.keywords.store' => 'materials',
+        'admin.keyword-libraries.keywords.delete' => 'materials',
+        'admin.keyword-libraries.import' => 'materials',
+        'admin.title-libraries.index' => 'materials',
+        'admin.title-libraries.create' => 'materials',
+        'admin.title-libraries.edit' => 'materials',
+        'admin.title-libraries.detail' => 'materials',
+        'admin.title-libraries.titles.store' => 'materials',
+        'admin.title-libraries.titles.delete' => 'materials',
+        'admin.title-libraries.import' => 'materials',
+        'admin.title-libraries.ai-generate' => 'materials',
+        'admin.title-libraries.ai-generate.submit' => 'materials',
+        'admin.image-libraries.index' => 'materials',
+        'admin.image-libraries.create' => 'materials',
+        'admin.image-libraries.edit' => 'materials',
+        'admin.image-libraries.detail' => 'materials',
+        'admin.image-libraries.images.create' => 'materials',
+        'admin.image-libraries.images.upload' => 'materials',
+        'admin.image-libraries.images.delete' => 'materials',
+        'admin.image-libraries.detail.update' => 'materials',
+        'admin.knowledge-bases.index' => 'materials',
+        'admin.knowledge-bases.create' => 'materials',
+        'admin.knowledge-bases.edit' => 'materials',
+        'admin.knowledge-bases.detail' => 'materials',
+        'admin.knowledge-bases.upload' => 'materials',
+        'admin.knowledge-bases.detail.update' => 'materials',
+        'admin.url-import' => 'materials',
         'admin.ai-models.index' => 'ai_config',
+        'admin.ai-source-providers.index' => 'ai_config',
         'admin.ai-prompts' => 'ai_config',
         'admin.site-settings.sensitive-words' => 'site_settings',
         'admin.site-settings.sensitive-words.store' => 'site_settings',
@@ -166,6 +144,9 @@
                 </div>
             </nav>
             <div class="flex shrink-0 items-center gap-2 sm:gap-3 ml-auto">
+                <button type="button" data-pwa-install hidden aria-label="{{ __('admin.ui_v3.install_workbench_label') }}" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 transition-[background-color,color,transform] duration-150 hover:bg-gray-50 active:scale-96 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+                    <i data-lucide="app-window" class="h-4 w-4"></i><span class="hidden lg:inline">{{ __('admin.ui_v3.install_workbench') }}</span>
+                </button>
                 <div class="relative">
                     <button onclick="toggleAdminNotifications()" class="relative rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors duration-200" type="button" aria-label="{{ __('admin.header.notifications.label') }}" title="{{ __('admin.header.notifications.label') }}">
                         <i data-lucide="bell" class="w-5 h-5"></i>
@@ -204,7 +185,7 @@
                             @endif
 
                             <div class="mt-4 space-y-1 rounded-xl bg-gray-50 px-3 py-3 text-xs text-gray-500">
-                                <div>{{ __('admin.header.notifications.current_version', ['version' => (string) ($updateState['current_version'] ?? config('geoflow.app_version', '2.0'))]) }}</div>
+                                <div>{{ __('admin.header.notifications.current_version', ['version' => (string) ($updateState['current_version'] ?? config('geoflow.app_version', '0.0.0-dev'))]) }}</div>
                                 @if(!empty($updateState['latest_version']))
                                     <div>{{ __('admin.header.notifications.latest_version', ['version' => (string) $updateState['latest_version']]) }}</div>
                                 @endif
@@ -215,7 +196,7 @@
                             </div>
 
                             <div class="mt-4 flex flex-wrap gap-2">
-                                @if($isUpdateCenterEnabled && $showUpdateCenter && $isSuperAdmin)
+                                @if($isUpdateCenterEnabled && $isSuperAdmin)
                                     <a href="{{ $notificationUpdateCenterUrl }}" class="inline-flex items-center rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700">
                                         {{ __('admin.header.notifications.open_update_center') }}
                                     </a>
@@ -274,12 +255,10 @@
                                 <i data-lucide="clipboard-list" class="w-4 h-4 inline mr-2"></i>
                                 {{ __('admin.nav.activity_logs') }}
                             </a>
-                            @if ($showApiTokens)
-                                <a href="{{ route('admin.api-tokens.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                    <i data-lucide="key-round" class="w-4 h-4 inline mr-2"></i>
-                                    {{ __('admin.nav.api_tokens') }}
-                                </a>
-                            @endif
+                            <a href="{{ route('admin.api-tokens.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                <i data-lucide="key-round" class="w-4 h-4 inline mr-2"></i>
+                                {{ __('admin.nav.api_tokens') }}
+                            </a>
                         @endif
                         <div class="border-t border-gray-100"></div>
                         <form method="POST" action="{{ route('admin.logout') }}">

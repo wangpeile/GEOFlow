@@ -5,7 +5,7 @@
 - `docker-compose.prod.yml`
 - `docker/Dockerfile.prod`
 - `docker/nginx/Dockerfile.prod`
-- `docker/nginx/default.conf`
+- `docker/nginx/default.conf.template`
 - `docker/entrypoint.prod.sh`
 - `.env.prod.example`
 
@@ -15,7 +15,8 @@
 
 - `web`: `nginx`
 - `app`: `php-fpm`
-- `queue`: `php artisan queue:work`
+- `queue`: 文章生成、分发、主题复刻与默认任务
+- `knowledge-queue`: 知识库解析与向量化任务
 - `scheduler`: `php artisan schedule:work`
 - `reverb`: `php artisan reverb:start`
 - `postgres`: PostgreSQL 16 + pgvector
@@ -65,7 +66,8 @@ vi .env.prod
 
 ```env
 APP_URL=https://your-domain.com
-TRUSTED_PROXIES=*
+SESSION_SECURE_COOKIE=true
+TRUSTED_PROXIES=203.0.113.10
 APP_KEY=base64:replace-with-generated-key
 
 DB_DATABASE=geo_flow
@@ -74,13 +76,17 @@ DB_PASSWORD=change-this-password
 
 REDIS_PASSWORD=
 WEB_PORT=18080
-REVERB_EXPOSE_PORT=18081
+REVERB_HOST=your-domain.com
+REVERB_PORT=443
+REVERB_SCHEME=https
+REVERB_ALLOWED_ORIGINS=your-domain.com
 ```
 
 说明：
 
 - `APP_KEY` 可留空：应用容器启动时会 `key:generate` 写回 `.env.prod`（可写挂载）；也可在宿主机执行 `php artisan key:generate --show` 后粘贴。
-- `TRUSTED_PROXIES` 用于反向代理、CDN、负载均衡或一级目录部署。若外层代理会传 `X-Forwarded-Proto` / `X-Forwarded-Host` / `X-Forwarded-Prefix`，生产环境通常可设为 `*` 或具体代理 IP。
+- `SESSION_SECURE_COOKIE` 必须与访问协议一致：HTTPS 使用 `true`，直接通过 `http://IP:端口` 访问使用 `false`，否则浏览器不会回传登录 Cookie。
+- `TRUSTED_PROXIES` 在直连部署中留空；反向代理、CDN、负载均衡或一级目录部署填写实际代理 IP/CIDR。避免使用 `*`，否则直连客户端可伪造转发地址并绕过按 IP 的登录限流。
 - 如果部署在任意一级目录下，例如外部访问路径是 `/wiki`、`/docs`、`/site`，不要把目录写进 `ADMIN_BASE_PATH`；应由反向代理透传 `X-Forwarded-Prefix`，后台路径仍保持 `ADMIN_BASE_PATH=geo_admin`。
 - `AUTO_MIGRATE=true` 由生产 `init` 服务执行迁移；常驻服务不接收 `.env.prod` 作为容器环境变量，重启时不会重复初始化。
 - `AUTO_INSTALL_ONCE=true` 由生产 `init` 服务在迁移后运行 `php artisan geoflow:install`；该命令只在空库首次安装时执行安装填充，旧库只补初始化标记。
@@ -105,7 +111,7 @@ export COMPOSE_PROD='docker compose --env-file .env.prod -f docker-compose.prod.
 $COMPOSE_PROD build
 $COMPOSE_PROD up -d postgres redis
 $COMPOSE_PROD up -d init
-$COMPOSE_PROD up -d app web queue scheduler reverb
+$COMPOSE_PROD up -d --remove-orphans app web queue ai-quality-queue ai-quality-backfill-queue ai-optimization-queue knowledge-queue scheduler reverb
 ```
 
 `init` 服务会把 `GEOFLOW_SECURITY_FRESH_INSTALL_CONFIRMED=true` 仅注入该一次性容器。迁移只在单一 fresh migration batch 且业务表为空时接受此标志；已有部署仍需下一节的 drain confirmation。
@@ -119,7 +125,8 @@ $COMPOSE_PROD up -d app web queue scheduler reverb
 ```bash
 # 1. 先进入维护模式，再停止入口和所有旧版常驻进程。
 $COMPOSE_PROD exec app php artisan down
-$COMPOSE_PROD stop web queue scheduler reverb
+$COMPOSE_PROD stop web queue ai-quality-queue ai-quality-backfill-queue ai-optimization-queue knowledge-queue scheduler reverb
+docker stop --time 900 geoflow-system-update-queue-prod 2>/dev/null || true
 
 # 2. 等待负载均衡连接、PHP 请求、队列任务和调度任务全部结束；确认零在途后停止 app。
 # 请使用平台连接数、进程列表和队列监控完成确认。
@@ -134,19 +141,27 @@ $COMPOSE_PROD build
 $COMPOSE_PROD up -d postgres redis
 $COMPOSE_PROD up init
 
-# 5. 迁移成功后立即将一次性确认恢复为 false，再启动全部新版本进程：
+# 5. 迁移成功后立即将一次性确认恢复为 false。先保持入口和常驻队列停止，执行三层召回回填：
 # GEOFLOW_SECURITY_UPGRADE_DRAIN_CONFIRMED=false
-$COMPOSE_PROD up -d app web queue scheduler reverb
+$COMPOSE_PROD run --rm app php artisan geoflow:backfill-ai-quality-retrieval --dry-run
+$COMPOSE_PROD run --rm app php artisan geoflow:backfill-ai-quality-retrieval
+$COMPOSE_PROD run --rm app php artisan geoflow:backfill-ai-quality-retrieval --dry-run
 
-# 6. 回填并检查受管图片身份；remaining、terminal、registry_failed 必须都为 0。
+# 6. 最后一次 dry-run 的 tasks、tasks_deferred、checks、checks_staled、sources、knowledge_bases、
+# readiness_projections、atomic_fact_counts 必须全部为 0，再启动全部新版本进程。
+$COMPOSE_PROD up -d --remove-orphans app web queue ai-quality-queue ai-quality-backfill-queue ai-optimization-queue knowledge-queue scheduler reverb
+
+# 7. 回填并检查受管图片身份；remaining、terminal、registry_failed 必须都为 0。
 $COMPOSE_PROD run --rm app php artisan geoflow:managed-images:readiness
 
-# 7. 运行只读安全审计，并逐项处理或确认 finding。
+# 8. 运行只读安全审计，并逐项处理或确认 finding。
 $COMPOSE_PROD run --rm app php artisan geoflow:security-audit
 
-# 8. 退出维护模式并恢复流量。
+# 9. 退出维护模式并恢复流量。
 $COMPOSE_PROD exec app php artisan up
 ```
+
+三层召回回填会在行锁内补齐知识库正文摘要、切片服务代次、原子事实数量、任务召回模式和历史质检来源账本。缺少可用切片的历史任务会计入 `tasks_deferred` 并保留空召回模式；缺少可验证召回依据的历史发布门禁结果会转为 `stale`，等待新版本重新质检。出现 `tasks_deferred` 时，保持维护模式，先修复对应知识库的切片同步，再重复执行实际回填和 dry-run。最终校验未全部归零时停止发布，不恢复入口流量。
 
 readiness 命令会回填已有图片路径哈希，并在路径锁内对账注册表、文件状态和内容哈希。永久无效的历史路径会保留稳定终态哈希，并计入 `terminal`；文件缺失、身份不一致或无法安全读取会计入 `registry_failed`。确认输出表格的 `remaining`、`terminal`、`registry_failed` 都为 `0`，再运行 `geoflow:security-audit`。该审计命令严格只读，不回填哈希、不修改数据库、不访问 HTTP/DNS，也不启动外部进程。人工可读模式和 JSON 模式使用相同 finding 集合：
 
@@ -163,7 +178,7 @@ $COMPOSE_PROD run --rm app php artisan geoflow:security-audit --json
 完成审计处理，再次确认运行中的容器全部来自新镜像，然后将 `GEOFLOW_MANAGED_IMAGE_DELETION_ENABLED=true` 写入生产环境配置，并重新创建会执行图片清理的新版本进程：
 
 ```bash
-$COMPOSE_PROD up -d --force-recreate app queue scheduler
+$COMPOSE_PROD up -d --force-recreate app queue ai-quality-queue ai-quality-backfill-queue knowledge-queue scheduler
 ```
 
 门禁关闭或回填未完成时，数据库记录仍可删除，物理图片文件会安全保留并记录清理失败日志。
@@ -171,7 +186,7 @@ $COMPOSE_PROD up -d --force-recreate app queue scheduler
 以下单条命令仅适用于全新空库安装。已有数据的升级执行它会触发安全迁移门禁；不要通过预设一次性确认绕过停机排空流程：
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans --build
 ```
 
 但第一次部署仍建议先观察 `init` 是否完成迁移。
@@ -181,7 +196,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 - 前台与后台统一从 `web`（Nginx）进入
 - 站点：`http://服务器IP:${WEB_PORT}` 或你的反向代理域名
 - 后台：`/geo_admin/login`（或你的 `ADMIN_BASE_PATH`）
-- Reverb：默认映射 `${REVERB_EXPOSE_PORT}:8080`
+- Reverb：通过主站 Nginx 的 `/reverb` 入口访问，生产 Compose 不发布 Reverb 容器端口
 
 ### 默认管理员（首次安装）
 
@@ -192,7 +207,18 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm app php artisan geoflow:install
 ```
 
-账号由 `Database\Seeders\AdminUserSeeder` 在首次空库安装时写入：只在目标用户名不存在时创建，**重复执行不会覆盖**已存在账号的用户名、邮箱或密码。前台演示分类和文章默认不会写入；只有显式设置 `GEOFLOW_SEED_FRONTEND_DEMO=true` 且首次空库安装时才会导入演示数据。
+账号由 `Database\Seeders\AdminUserSeeder` 在首次空库安装时写入：只在目标用户名不存在时创建，**重复执行不会覆盖**已存在账号的用户名、邮箱或密码。正式安装流程不调用 `FrontendDemoSeeder`，也不会写入前台演示分类、文章或站点设置。
+
+### AI 工作台系统知识同步
+
+首次空库执行 `geoflow:install` 时会创建 AI 工作台系统知识正文。新版本部署完成迁移后，还需要显式同步当前官方正文和 24 张私有知识截图：
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm app \
+  php artisan geoflow:sync-system-knowledge --key=ai_workspace_manual --media
+```
+
+该命令可以重复执行。已由管理员二次编辑的正文会继续保留；官方版本、健康状态和可采用更新会显示在知识库详情。命令返回失败时停止该次发布验收，检查随包 Markdown、图片清单、文件哈希、私有存储写权限和 knowledge 队列。同步成功后验证系统知识库不可删除、问答包含参考章节、相关入口遵循当前后台前缀，并分别测试带图与纯文字回答。
 
 | 项目 | 值 |
 |------|-----|
@@ -203,7 +229,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm app php 
 
 ### 初始化数据维护规则
 
-后续新增默认站点配置、默认提示词、默认渠道、默认模板、演示分类或演示文章时，必须接入 `php artisan geoflow:install` 的首次空库安装路径，或通过明确的手动修复命令执行。不要把用户可修改的默认数据放到常规容器启动、迁移或每次升级都会自动执行的 seed 流程里，避免覆盖线上用户配置。
+后续新增必要的默认站点配置、默认提示词、默认渠道或默认模板时，必须接入 `php artisan geoflow:install` 的首次空库安装路径，或通过明确的手动修复命令执行。演示分类和演示文章只允许在测试环境显式调用专用 Seeder。不要把用户可修改的数据放到常规容器启动、迁移或每次升级都会自动执行的 seed 流程里，避免覆盖线上用户配置。
 
 ## 5. 关键差异
 
@@ -277,12 +303,12 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm \
 建议按顺序尝试：
 
 1. **直接重试** `docker compose --env-file .env.prod -f docker-compose.prod.yml build`（偶发 Hub 或链路问题）。
-2. **单独拉基础镜像**，确认是拉取问题还是仅 BuildKit 缓存问题：  
-   `docker pull php:8.4-fpm-bookworm`  
+2. **单独拉基础镜像**，确认是拉取问题还是仅 BuildKit 缓存问题：
+   `docker pull php:8.4-fpm-bookworm`
    若此处同样 `not found`，说明当前访问的 registry/加速源缺层，需换源或直连。
 3. **检查本机 `/etc/docker/daemon.json` 的 `registry-mirrors`**：部分公共加速源对 `docker.io` 层同步不完整，可**暂时注释镜像加速**后重启 Docker，再 `docker pull` / `build`；或换成你环境稳定可用的镜像源策略。
-4. **清理构建缓存后再构建**：  
-   `docker builder prune -f`  
+4. **清理构建缓存后再构建**：
+   `docker builder prune -f`
    必要时再 `docker system prune`（注意会删掉未使用镜像，执行前自行确认）。
 
 仍失败时，把 **`docker pull php:8.4-fpm-bookworm` 的完整输出**与 **`daemon.json` 中与 registry 相关的配置**（可打码）一并排查网络与镜像源。

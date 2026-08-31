@@ -106,21 +106,28 @@ class WordPressRestPublisher implements DistributionPublisherInterface
         ];
     }
 
-    public function syncSiteSettings(DistributionChannel $channel): array
+    public function syncSiteSettings(
+        DistributionChannel $channel,
+        ?string $idempotencyKey = null,
+        ?array $settings = null,
+    ): array
     {
         if (! $channel->resolvedChannelConfig()['wordpress_site_settings_sync_enabled']) {
             throw new RuntimeException('当前 WordPress 渠道账号未授权站点设置同步。');
         }
 
-        $settings = $channel->resolvedSiteSettings();
+        $settings ??= $channel->resolvedSiteSettings();
         $payload = [
             'title' => $settings['site_name'],
             'description' => $settings['site_description'],
             'posts_per_page' => $settings['per_page'],
         ];
 
-        $response = $this->requestFactory->request($channel)
-            ->post($channel->wordpressRestBaseUrl().'/wp/v2/settings', $payload);
+        $request = $this->requestFactory->request($channel);
+        if (is_string($idempotencyKey) && $idempotencyKey !== '') {
+            $request = $request->withHeaders(['Idempotency-Key' => $idempotencyKey]);
+        }
+        $response = $request->post($channel->wordpressRestBaseUrl().'/wp/v2/settings', $payload);
         $this->throwIfFailed($response, 'WordPress 站点设置同步');
 
         return [

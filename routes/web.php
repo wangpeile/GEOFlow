@@ -4,63 +4,90 @@
  * Web 路由：前台与 Blade 管理后台（路径见 config/geoflow.admin_base_path，默认 geo_admin）。
  */
 
+use App\Http\Controllers\Admin\AdminAccountController;
 use App\Http\Controllers\Admin\AdminActivityLogController;
 use App\Http\Controllers\Admin\AdminAuthController;
+use App\Http\Controllers\Admin\AdminRecentActivityController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminWelcomeController;
 use App\Http\Controllers\Admin\AiModelController;
 use App\Http\Controllers\Admin\AiPromptController;
+use App\Http\Controllers\Admin\AiSourceProviderController;
 use App\Http\Controllers\Admin\AiSpecialPromptController;
+use App\Http\Controllers\Admin\AiVisibilityAnalyticsController;
+use App\Http\Controllers\Admin\AiWorkspaceApiController;
+use App\Http\Controllers\Admin\AiWorkspaceController;
+use App\Http\Controllers\Admin\AiWorkspaceKnowledgeMediaController;
 use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\ApiTokenController;
+use App\Http\Controllers\Admin\ArticleAiOptimizationController;
 use App\Http\Controllers\Admin\ArticleController;
 use App\Http\Controllers\Admin\ArticleEditorAssetController;
 use App\Http\Controllers\Admin\ArticleEditorAssistantController;
-use App\Http\Controllers\Admin\ArticleTypeController;
 use App\Http\Controllers\Admin\AuthorController;
+use App\Http\Controllers\Admin\BrowserClientController;
+use App\Http\Controllers\Admin\BrowserConnectionApprovalController;
 use App\Http\Controllers\Admin\CategoryController;
-use App\Http\Controllers\Admin\ContentArticleController;
-use App\Http\Controllers\Admin\ContentAssetController;
-use App\Http\Controllers\Admin\ContentCenterController;
-use App\Http\Controllers\Admin\ContentDirectionController;
-use App\Http\Controllers\Admin\ContentEvidenceController;
-use App\Http\Controllers\Admin\ContentGroupController;
-use App\Http\Controllers\Admin\ContentOperationsController;
-use App\Http\Controllers\Admin\ContentPlatformSpecificationController;
-use App\Http\Controllers\Admin\ContentProductionController;
-use App\Http\Controllers\Admin\ContentResearchController;
-use App\Http\Controllers\Admin\ContentTopicController;
-use App\Http\Controllers\Admin\ContentVariantController;
+use App\Http\Controllers\Admin\ContentAnalyticsController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DistributionAnalyticsController;
 use App\Http\Controllers\Admin\DistributionController;
 use App\Http\Controllers\Admin\EnterpriseKnowledgeController;
+use App\Http\Controllers\Admin\HostedSiteController;
 use App\Http\Controllers\Admin\ImageLibraryController;
 use App\Http\Controllers\Admin\KeywordLibraryController;
 use App\Http\Controllers\Admin\KnowledgeBaseController;
+use App\Http\Controllers\Admin\KnowledgeBaseMediaController;
+use App\Http\Controllers\Admin\KnowledgeFactController;
+use App\Http\Controllers\Admin\KnowledgeFactGenerationController;
+use App\Http\Controllers\Admin\LeadAnalyticsController;
 use App\Http\Controllers\Admin\LeadController;
 use App\Http\Controllers\Admin\LeadFormController;
 use App\Http\Controllers\Admin\LegacyController;
+use App\Http\Controllers\Admin\LegacySystemUpdateHistoryController;
+use App\Http\Controllers\Admin\ManualPublicationController;
+use App\Http\Controllers\Admin\ManualPublicationSettingsController;
 use App\Http\Controllers\Admin\MaterialsController;
 use App\Http\Controllers\Admin\SecuritySettingsController;
 use App\Http\Controllers\Admin\SiteSettingsController;
 use App\Http\Controllers\Admin\SiteThemeReplicationController;
 use App\Http\Controllers\Admin\SystemUpdateController;
-use App\Http\Controllers\Admin\TaskAutomationController;
+use App\Http\Controllers\Admin\SystemUpdaterOperationController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\Admin\TitleLibraryController;
+use App\Http\Controllers\Admin\TrafficAnalyticsController;
 use App\Http\Controllers\Admin\UrlImportController;
-use App\Http\Controllers\Admin\WordPressContentPublicationController;
-use App\Http\Controllers\Admin\WritingRuleController;
+use App\Http\Controllers\Site\AboutController;
 use App\Http\Controllers\Site\ArchiveController;
 use App\Http\Controllers\Site\ArticleController as SiteArticleController;
 use App\Http\Controllers\Site\CategoryController as SiteCategoryController;
 use App\Http\Controllers\Site\HomeController;
+use App\Http\Controllers\Site\HostedAssetController;
 use App\Http\Controllers\Site\LeadFormController as SiteLeadFormController;
+use App\Http\Controllers\Site\SiteDiscoveryController;
+use App\Support\AdminUiRegistry;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/favicon.ico', HostedAssetController::class)->name('site.asset.favicon');
+Route::get('/{assetPath}', HostedAssetController::class)
+    ->where('assetPath', '(?:(?:assets|js|storage|themes)/[a-zA-Z0-9._/-]+|build/assets/[a-zA-Z0-9._-]+)')
+    ->name('site.asset');
+
+Route::get('/app', function () {
+    return Auth::guard('admin')->check()
+        ? redirect()->route('admin.dashboard')
+        : redirect()->route('admin.login');
+})->name('pwa.launch');
+
 Route::middleware(['site.locale', 'site.view_log'])->group(function (): void {
     Route::get('/', [HomeController::class, 'index'])->name('site.home');
+    Route::get('/about', [AboutController::class, 'index'])->name('site.about');
+    Route::get('/robots.txt', [SiteDiscoveryController::class, 'robots'])->name('site.robots');
+    Route::get('/sitemap.xml', [SiteDiscoveryController::class, 'sitemap'])->name('site.sitemap');
+    Route::get('/sitemaps/pages-{page}.xml', [SiteDiscoveryController::class, 'sitemapShard'])
+        ->whereNumber('page')
+        ->name('site.sitemap.shard');
     Route::get('/archive', [ArchiveController::class, 'index'])->name('site.archive');
     Route::get('/archive/{year}/{month}', [ArchiveController::class, 'month'])
         ->name('site.archive.month')
@@ -69,7 +96,7 @@ Route::middleware(['site.locale', 'site.view_log'])->group(function (): void {
     Route::get('/article/{slug}', [SiteArticleController::class, 'show'])->name('site.article');
     Route::get('/forms/{slug}', [SiteLeadFormController::class, 'show'])->name('site.lead-forms.show');
     Route::post('/forms/{slug}/submissions', [SiteLeadFormController::class, 'submit'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:site-lead-submission')
         ->name('site.lead-forms.submit');
 });
 
@@ -88,38 +115,86 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
     // 访客认证路由
     Route::middleware('guest:admin')->group(function () {
         Route::get('login', [AdminAuthController::class, 'showLoginForm'])->name('login');
-        Route::post('login', [AdminAuthController::class, 'login'])->name('login.attempt');
+        Route::post('login', [AdminAuthController::class, 'login'])
+            ->middleware('throttle:admin-login')
+            ->name('login.attempt');
     });
 
     // 后台受保护路由
-    Route::middleware(['admin.auth', 'admin.activity'])->group(function () {
+    Route::middleware(['admin.auth', 'admin.activity', 'admin.recent'])->group(function () {
         // 会话与首页
         Route::post('logout', [AdminAuthController::class, 'logout'])->name('logout');
         Route::post('welcome/dismiss', [AdminWelcomeController::class, 'dismiss'])->name('welcome.dismiss');
+        Route::middleware('admin.ui-v3')->group(function (): void {
+            Route::get('recent', AdminRecentActivityController::class)
+                ->middleware('throttle:admin-recent-read')
+                ->name('recent.index');
+            Route::get('ai-workspace', AiWorkspaceController::class)->name('ai-workspace');
+            Route::prefix('ai-workspace')->name('ai-workspace.')->group(function (): void {
+                Route::middleware('throttle:ai-workspace-read')->group(function (): void {
+                    Route::get('conversations', [AiWorkspaceApiController::class, 'conversations'])->name('conversations.index');
+                    Route::get('conversations/{conversation}', [AiWorkspaceApiController::class, 'showConversation'])->name('conversations.show');
+                    Route::get('media/{mediaAsset}', AiWorkspaceKnowledgeMediaController::class)
+                        ->whereNumber('mediaAsset')
+                        ->name('media.show');
+                });
+                Route::post('conversations/{conversation}/archive', [AiWorkspaceApiController::class, 'archiveConversation'])->middleware('throttle:ai-workspace')->name('conversations.archive');
+                Route::patch('conversations/{conversation}', [AiWorkspaceApiController::class, 'renameConversation'])->middleware('throttle:ai-workspace')->name('conversations.update');
+                Route::post('conversations', [AiWorkspaceApiController::class, 'storeConversation'])->middleware('throttle:ai-workspace')->name('conversations.store');
+                Route::post('conversations/{conversation}/messages', [AiWorkspaceApiController::class, 'sendMessage'])->middleware('throttle:ai-workspace-messages')->name('messages.store');
+            });
+            Route::prefix('account')->name('account.')->group(function (): void {
+                Route::get('/', [AdminAccountController::class, 'show'])->name('show');
+                Route::put('profile', [AdminAccountController::class, 'updateProfile'])->name('profile.update');
+                Route::put('password', [AdminAccountController::class, 'updatePassword'])
+                    ->middleware('throttle:admin-sensitive')
+                    ->name('password.update');
+            });
+        });
         Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+        Route::prefix('account/browser-clients')->name('account.browser-clients.')->group(function (): void {
+            Route::get('/', [BrowserClientController::class, 'index'])->name('index');
+            Route::delete('{tokenId}', [BrowserClientController::class, 'destroy'])
+                ->middleware('throttle:admin-sensitive')
+                ->whereNumber('tokenId')
+                ->name('destroy');
+        });
         Route::get('analytics', [AnalyticsController::class, 'index'])->name('analytics');
+        Route::prefix('analytics')->name('analytics.')->group(function (): void {
+            Route::get('content', ContentAnalyticsController::class)->name('content');
+            Route::get('traffic', TrafficAnalyticsController::class)->name('traffic');
+            Route::get('ai-visibility', AiVisibilityAnalyticsController::class)->name('ai-visibility');
+            Route::get('leads', LeadAnalyticsController::class)->name('leads');
+            Route::get('distribution', DistributionAnalyticsController::class)
+                ->middleware('admin.super')
+                ->name('distribution');
+        });
 
-        Route::get('content-assets', [ContentAssetController::class, 'index'])
-            ->middleware(['admin.super', 'content.production.enabled'])->name('content-assets.index');
-        Route::get('content-center', [ContentCenterController::class, 'index'])
-            ->middleware(['admin.super', 'content.production.enabled'])->name('content-center.index');
-
-        Route::prefix('system-updates')->name('system-updates.')->group(function () {
+        Route::prefix('system-updates')->name('system-updates.')->middleware('admin.super')->group(function () {
             Route::get('/', [SystemUpdateController::class, 'index'])->name('index');
-            Route::post('check', [SystemUpdateController::class, 'check'])->name('check');
-            Route::get('runs/status', [SystemUpdateController::class, 'runsStatus'])->name('runs.status');
-            Route::get('runs/{runUuid}', [SystemUpdateController::class, 'runShow'])->name('runs.show');
-            Route::post('runs/{runUuid}/retry', [SystemUpdateController::class, 'retryRun'])->name('runs.retry');
-            Route::post('runs/{runUuid}/mark-failed', [SystemUpdateController::class, 'markRunFailed'])->name('runs.mark-failed');
-            Route::post('plan', [SystemUpdateController::class, 'plan'])->name('plan');
-            Route::post('backup', [SystemUpdateController::class, 'backup'])->name('backup');
-            Route::post('apply', [SystemUpdateController::class, 'apply'])->name('apply');
-            Route::post('plans/{runUuid}/commands/{commandIndex}/executed', [SystemUpdateController::class, 'markCommandExecuted'])
-                ->whereNumber('commandIndex')
-                ->name('commands.executed');
-            Route::get('backups/{backupUuid}', [SystemUpdateController::class, 'backupShow'])->name('backups.show');
-            Route::post('backups/{backupUuid}/files/rollback', [SystemUpdateController::class, 'rollbackFile'])->name('rollback-file');
-            Route::post('backups/{backupUuid}/rollback', [SystemUpdateController::class, 'rollback'])->name('rollback');
+            Route::post('updater/prepare', [SystemUpdaterOperationController::class, 'prepare'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('updater.prepare');
+            Route::get('updater/download', [SystemUpdaterOperationController::class, 'download'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('updater.download');
+            Route::post('updater/update', [SystemUpdaterOperationController::class, 'update'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('updater.update');
+            Route::post('updater/backup', [SystemUpdaterOperationController::class, 'backup'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('updater.backup');
+            Route::post('updater/rollback', [SystemUpdaterOperationController::class, 'rollback'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('updater.rollback');
+            Route::post('updater/verify', [SystemUpdaterOperationController::class, 'verify'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('updater.verify');
+            Route::post('check', [SystemUpdateController::class, 'check'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('check');
+            Route::get('runs/{runUuid}', [LegacySystemUpdateHistoryController::class, 'run'])->name('runs.show');
+            Route::get('backups/{backupUuid}', [LegacySystemUpdateHistoryController::class, 'backup'])->name('backups.show');
         });
 
         Route::prefix('lead-forms')->name('lead-forms.')->group(function () {
@@ -141,8 +216,12 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
         // 任务管理（Blade 新路径）
         Route::prefix('tasks')->name('tasks.')->group(function () {
             Route::get('/', [TaskController::class, 'index'])->name('index');
+            Route::get('workers', [TaskController::class, 'workers'])->name('workers');
+            Route::get('jobs', [TaskController::class, 'jobs'])->name('jobs');
+            Route::post('title-readiness', [TaskController::class, 'titleReadiness'])->name('title-readiness');
             Route::post('{taskId}/toggle-status', [TaskController::class, 'toggleStatus'])->name('toggle-status');
             Route::post('{taskId}/delete', [TaskController::class, 'destroyTask'])->name('delete');
+            Route::post('{taskId}/restore', [TaskController::class, 'restoreTask'])->whereNumber('taskId')->name('restore');
             Route::get('create', [TaskController::class, 'create'])->name('create');
             Route::post('create', [TaskController::class, 'store'])->name('store');
             Route::get('{taskId}/edit', [TaskController::class, 'edit'])->name('edit');
@@ -156,6 +235,21 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::get('/', [DistributionController::class, 'index'])->name('index');
             Route::get('create', [DistributionController::class, 'create'])->name('create');
             Route::post('create', [DistributionController::class, 'store'])->name('store');
+            Route::prefix('hosted-sites')->name('hosted-sites.')->middleware('hosted-sites.enabled')->scopeBindings()->group(function (): void {
+                Route::get('/', [HostedSiteController::class, 'index'])->name('index');
+                Route::get('create', [HostedSiteController::class, 'create'])->name('create');
+                Route::post('/', [HostedSiteController::class, 'store'])->name('store');
+                Route::get('{hostedSite}', [HostedSiteController::class, 'show'])->name('show');
+                Route::get('{hostedSite}/edit', [HostedSiteController::class, 'edit'])->name('edit');
+                Route::put('{hostedSite}', [HostedSiteController::class, 'update'])->name('update');
+                Route::post('{hostedSite}/preflight', [HostedSiteController::class, 'preflight'])->name('preflight');
+                Route::post('{hostedSite}/activate', [HostedSiteController::class, 'activate'])->name('activate');
+                Route::post('{hostedSite}/pause', [HostedSiteController::class, 'pause'])->name('pause');
+                Route::post('{hostedSite}/maintenance', [HostedSiteController::class, 'maintenance'])->name('maintenance');
+                Route::post('{hostedSite}/indexing', [HostedSiteController::class, 'indexing'])->name('indexing');
+                Route::post('{hostedSite}/archive', [HostedSiteController::class, 'archive'])->name('archive');
+                Route::post('{hostedSite}/articles', [HostedSiteController::class, 'assignArticle'])->name('articles.assign');
+            })->whereNumber('hostedSite');
             Route::get('jobs', [DistributionController::class, 'jobs'])->name('jobs');
             Route::get('sync-settings-all/preview', [DistributionController::class, 'previewSyncSettingsAll'])->name('sync-settings-all.preview');
             Route::post('sync-settings-all', [DistributionController::class, 'syncSettingsAll'])->name('sync-settings-all');
@@ -189,177 +283,90 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::post('batch/update-status', [ArticleController::class, 'batchUpdateStatus'])->name('batch.update-status');
             Route::post('batch/update-review', [ArticleController::class, 'batchUpdateReview'])->name('batch.update-review');
             Route::post('batch/delete', [ArticleController::class, 'batchDelete'])->name('batch.delete');
+            Route::post('batch/export-markdown/prepare', [ArticleController::class, 'prepareMarkdownExport'])
+                ->middleware('throttle:article-markdown-export-prepare')
+                ->name('batch.export-markdown.prepare');
+            Route::get('batch/export-markdown/download/{exportToken}', [ArticleController::class, 'downloadMarkdownExport'])
+                ->middleware(['signed:relative', 'throttle:article-markdown-export-download'])
+                ->where('exportToken', '[A-Za-z0-9]{40}')
+                ->name('batch.export-markdown.download');
             Route::post('batch/restore', [ArticleController::class, 'batchRestore'])->name('batch.restore');
-            Route::post('batch/force-delete', [ArticleController::class, 'batchForceDelete'])->name('batch.force-delete');
-            Route::post('trash/empty', [ArticleController::class, 'emptyTrash'])->name('trash.empty');
+            Route::post('batch/force-delete', [ArticleController::class, 'batchForceDelete'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('batch.force-delete');
+            Route::post('trash/empty', [ArticleController::class, 'emptyTrash'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('trash.empty');
             Route::post('editor/wechat-html', [ArticleEditorAssetController::class, 'exportWeChatHtml'])->name('editor.wechat-html');
+            Route::get('editor/titles', [ArticleEditorAssistantController::class, 'titles'])->name('editor.titles');
+            Route::post('editor/generate', [ArticleEditorAssistantController::class, 'generate'])->middleware('throttle:10,1')->name('editor.generate');
             Route::get('create', [ArticleController::class, 'create'])->name('create');
             Route::post('create', [ArticleController::class, 'store'])->name('store');
             Route::post('{articleId}/restore', [ArticleController::class, 'restore'])->name('restore')->whereNumber('articleId');
-            Route::post('{articleId}/force-delete', [ArticleController::class, 'forceDelete'])->name('force-delete')->whereNumber('articleId');
+            Route::post('{articleId}/force-delete', [ArticleController::class, 'forceDelete'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('force-delete')
+                ->whereNumber('articleId');
             Route::get('{articleId}/edit', [ArticleController::class, 'edit'])->name('edit');
             Route::post('{articleId}/risk-scan', [ArticleController::class, 'recheckRisk'])->name('risk-scan')->whereNumber('articleId');
+            Route::post('{articleId}/ai-quality/recheck', [ArticleController::class, 'recheckAiQuality'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('ai-quality.recheck')
+                ->whereNumber('articleId');
+            Route::get('{articleId}/ai-quality/status', [ArticleController::class, 'aiQualityStatus'])
+                ->middleware('throttle:120,1')
+                ->name('ai-quality.status')
+                ->whereNumber('articleId');
+            Route::post('{articleId}/ai-quality/optimization', [ArticleAiOptimizationController::class, 'store'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('ai-quality.optimization.store')
+                ->whereNumber('articleId');
+            Route::get('{articleId}/ai-quality/optimization/{runId}/candidate', [ArticleAiOptimizationController::class, 'candidate'])
+                ->middleware('throttle:120,1')
+                ->name('ai-quality.optimization.candidate')
+                ->whereNumber(['articleId', 'runId']);
+            Route::post('{articleId}/ai-quality/optimization/{runId}/apply', [ArticleAiOptimizationController::class, 'apply'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('ai-quality.optimization.apply')
+                ->whereNumber(['articleId', 'runId']);
+            Route::post('{articleId}/ai-quality/optimization/{runId}/cancel', [ArticleAiOptimizationController::class, 'cancel'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('ai-quality.optimization.cancel')
+                ->whereNumber(['articleId', 'runId']);
+            Route::post('{articleId}/ai-quality/optimization/{runId}/rollback', [ArticleAiOptimizationController::class, 'rollback'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('ai-quality.optimization.rollback')
+                ->whereNumber(['articleId', 'runId']);
+            Route::post('{articleId}/ai-quality/workflow-retry', [ArticleController::class, 'retryAiQualityWorkflow'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('ai-quality.workflow-retry')
+                ->whereNumber('articleId');
+            Route::post('{articleId}/ai-quality/override', [ArticleController::class, 'overrideAiQuality'])->name('ai-quality.override')->whereNumber('articleId');
             Route::post('{articleId}/editor/images/upload', [ArticleEditorAssetController::class, 'uploadImage'])->name('editor.images.upload')->whereNumber('articleId');
-            Route::post('{articleId}/editor/assist', ArticleEditorAssistantController::class)
-                ->middleware(['admin.super', 'content.production.enabled', 'throttle:admin-sensitive'])
-                ->name('editor.assist')->whereNumber('articleId');
             Route::put('{articleId}', [ArticleController::class, 'update'])->name('update');
         });
 
-        Route::prefix('content-groups')->name('content-groups.')
-            ->middleware(['admin.super', 'content.production.enabled'])
-            ->group(function () {
-                Route::get('/', [ContentGroupController::class, 'index'])->name('index');
-                Route::post('articles/{article}', [ContentGroupController::class, 'store'])->name('store');
-                Route::get('{contentGroup}', [ContentGroupController::class, 'show'])->name('show');
-                Route::post('{contentGroup}/variants/generate', [ContentGroupController::class, 'generate'])->name('variants.generate');
-                Route::post('{contentGroup}/variants/export', [ContentVariantController::class, 'export'])->name('variants.export');
-                Route::get('{contentGroup}/variants/{contentVariant}/preview', [ContentVariantController::class, 'preview'])->name('variants.preview');
-                Route::post('{contentGroup}/variants/{contentVariant}/feedback', [ContentVariantController::class, 'feedback'])->name('variants.feedback');
-                Route::get('{contentGroup}/variants/{contentVariant}/edit', [ContentVariantController::class, 'edit'])->name('variants.edit');
-                Route::put('{contentGroup}/variants/{contentVariant}', [ContentVariantController::class, 'update'])->name('variants.update');
-                Route::post('{contentGroup}/variants/{contentVariant}/review', [ContentVariantController::class, 'review'])->name('variants.review');
-                Route::post('{contentGroup}/variants/{contentVariant}/regenerate', [ContentGroupController::class, 'regenerate'])->name('variants.regenerate');
-                Route::post('{contentGroup}/variants/{contentVariant}/wordpress-publications', [WordPressContentPublicationController::class, 'store'])->name('variants.wordpress.publish');
-                Route::post('{contentGroup}/variants/{contentVariant}/wordpress-publications/{articleDistribution}/retry', [WordPressContentPublicationController::class, 'retry'])->name('variants.wordpress.retry');
+        Route::prefix('manual-publications')->name('manual-publications.')->group(function () {
+            Route::get('browser-connect', [BrowserConnectionApprovalController::class, 'show'])->name('browser-connect.show');
+            Route::post('browser-connect/decision', [BrowserConnectionApprovalController::class, 'decision'])
+                ->middleware('throttle:admin-sensitive')
+                ->name('browser-connect.decision');
+            Route::get('/', [ManualPublicationController::class, 'index'])->name('index');
+            Route::get('export', [ManualPublicationController::class, 'export'])->name('export');
+            Route::get('create', [ManualPublicationController::class, 'create'])->name('create');
+            Route::post('/', [ManualPublicationController::class, 'store'])->name('store');
+            Route::middleware('admin.super')->prefix('settings')->name('settings.')->group(function () {
+                Route::get('/', [ManualPublicationSettingsController::class, 'index'])->name('index');
+                Route::post('personas', [ManualPublicationSettingsController::class, 'storePersona'])->name('personas.store');
+                Route::put('personas/{personaId}', [ManualPublicationSettingsController::class, 'updatePersona'])->name('personas.update')->whereNumber('personaId');
+                Route::post('accounts', [ManualPublicationSettingsController::class, 'storeAccount'])->name('accounts.store');
+                Route::put('accounts/{accountId}', [ManualPublicationSettingsController::class, 'updateAccount'])->name('accounts.update')->whereNumber('accountId');
             });
-
-        Route::get('distribution-center', [ContentGroupController::class, 'index'])
-            ->middleware(['admin.super', 'content.production.enabled'])->name('distribution-center.index');
-
-        Route::prefix('content-platform-specifications')->name('content-platform-specifications.')
-            ->middleware(['admin.super', 'content.production.enabled'])->group(function () {
-                Route::get('/', [ContentPlatformSpecificationController::class, 'index'])->name('index');
-                Route::get('{platform}/edit', [ContentPlatformSpecificationController::class, 'edit'])->name('edit');
-                Route::put('{platform}', [ContentPlatformSpecificationController::class, 'update'])->name('update');
-            });
-
-        Route::middleware(['admin.super', 'content.production.enabled'])->group(function () {
-            Route::prefix('writing-rules')->name('writing-rules.')->group(function () {
-                Route::get('/', [WritingRuleController::class, 'index'])->name('index');
-                Route::get('create', [WritingRuleController::class, 'create'])->name('create');
-                Route::post('/', [WritingRuleController::class, 'store'])->name('store');
-                Route::post('install-presets', [WritingRuleController::class, 'installPresets'])->name('install-presets');
-                Route::get('{writingRule}', [WritingRuleController::class, 'show'])->name('show');
-                Route::get('{writingRule}/edit', [WritingRuleController::class, 'edit'])->name('edit');
-                Route::put('{writingRule}', [WritingRuleController::class, 'update'])->name('update');
-            });
-            Route::prefix('article-types')->name('article-types.')->group(function () {
-                Route::get('/', [ArticleTypeController::class, 'index'])->name('index');
-                Route::get('create', [ArticleTypeController::class, 'create'])->name('create');
-                Route::post('/', [ArticleTypeController::class, 'store'])->name('store');
-                Route::get('{articleType}/edit', [ArticleTypeController::class, 'edit'])->name('edit');
-                Route::put('{articleType}', [ArticleTypeController::class, 'update'])->name('update');
-            });
+            Route::get('{manualPublicationId}', [ManualPublicationController::class, 'show'])->name('show')->whereNumber('manualPublicationId');
+            Route::get('{manualPublicationId}/edit', [ManualPublicationController::class, 'edit'])->name('edit')->whereNumber('manualPublicationId');
+            Route::put('{manualPublicationId}', [ManualPublicationController::class, 'update'])->name('update')->whereNumber('manualPublicationId');
+            Route::post('{manualPublicationId}/transition', [ManualPublicationController::class, 'transition'])->name('transition')->whereNumber('manualPublicationId');
         });
-
-        Route::prefix('content-productions')
-            ->name('content-productions.')
-            ->middleware(['admin.super', 'content.production.enabled'])
-            ->group(function () {
-                Route::get('/', [ContentProductionController::class, 'index'])->name('index');
-                Route::get('create', [ContentProductionController::class, 'create'])->name('create');
-                Route::post('/', [ContentProductionController::class, 'store'])->name('store');
-                Route::get('{contentProduction}', [ContentProductionController::class, 'show'])->name('show');
-                Route::patch('{contentProduction}/ownership', [ContentProductionController::class, 'updateOwnership'])
-                    ->name('ownership.update');
-                Route::post('{contentProduction}/stages/{stageRun}/retry', [ContentProductionController::class, 'retry'])
-                    ->middleware('admin.super')
-                    ->name('stages.retry');
-                Route::post('{contentProduction}/evidence/retrieve', [ContentEvidenceController::class, 'retrieve'])
-                    ->middleware('admin.super')
-                    ->name('evidence.retrieve');
-                Route::post('{contentProduction}/evidence/url-import', [ContentEvidenceController::class, 'attachUrl'])
-                    ->middleware('admin.super')
-                    ->name('evidence.url-import');
-                Route::post('{contentProduction}/evidence', [ContentEvidenceController::class, 'store'])
-                    ->middleware('admin.super')
-                    ->name('evidence.store');
-                Route::post('{contentProduction}/research', [ContentResearchController::class, 'store'])
-                    ->middleware('throttle:admin-sensitive')
-                    ->name('research.store');
-                Route::patch('{contentProduction}/evidence/{contentEvidence}', [ContentEvidenceController::class, 'update'])
-                    ->middleware('admin.super')
-                    ->name('evidence.update');
-                Route::delete('{contentProduction}/evidence/{contentEvidence}', [ContentEvidenceController::class, 'destroy'])
-                    ->middleware('admin.super')
-                    ->name('evidence.destroy');
-                Route::post('{contentProduction}/direction/brief/generate', [ContentDirectionController::class, 'generateBrief'])
-                    ->middleware('admin.super')->name('direction.brief.generate');
-                Route::post('{contentProduction}/direction/brief', [ContentDirectionController::class, 'saveBrief'])
-                    ->middleware('admin.super')->name('direction.brief.save');
-                Route::post('{contentProduction}/direction/titles/generate', [ContentDirectionController::class, 'generateTitles'])
-                    ->middleware('admin.super')->name('direction.titles.generate');
-                Route::post('{contentProduction}/direction/titles/select', [ContentDirectionController::class, 'selectTitle'])
-                    ->middleware('admin.super')->name('direction.titles.select');
-                Route::post('{contentProduction}/direction/outlines/generate', [ContentDirectionController::class, 'generateOutlines'])
-                    ->middleware('admin.super')->name('direction.outlines.generate');
-                Route::post('{contentProduction}/direction/outlines/update', [ContentDirectionController::class, 'updateOutline'])
-                    ->middleware('admin.super')->name('direction.outlines.update');
-                Route::post('{contentProduction}/direction/{kind}/confirm', [ContentDirectionController::class, 'confirm'])
-                    ->middleware('admin.super')
-                    ->whereIn('kind', ['brief', 'titles', 'outlines'])
-                    ->name('direction.confirm');
-                Route::post('{contentProduction}/article/sections/initialize', [ContentArticleController::class, 'initialize'])
-                    ->middleware('admin.super')->name('article.sections.initialize');
-                Route::post('{contentProduction}/article/sections/generate-all', [ContentArticleController::class, 'generateAll'])
-                    ->middleware('admin.super')->name('article.sections.generate-all');
-                Route::post('{contentProduction}/article/sections/{sectionKey}/generate', [ContentArticleController::class, 'generate'])
-                    ->middleware('admin.super')->whereUuid('sectionKey')->name('article.sections.generate');
-                Route::put('{contentProduction}/article/sections/{sectionKey}', [ContentArticleController::class, 'save'])
-                    ->middleware('admin.super')->whereUuid('sectionKey')->name('article.sections.save');
-                Route::post('{contentProduction}/article/assemble', [ContentArticleController::class, 'assemble'])
-                    ->middleware('admin.super')->name('article.assemble');
-                Route::post('{contentProduction}/article/promote', [ContentArticleController::class, 'promote'])
-                    ->middleware('admin.super')->name('article.promote');
-                Route::post('{contentProduction}/article/quality/inspect', [ContentArticleController::class, 'inspectQuality'])
-                    ->middleware('admin.super')->name('article.quality.inspect');
-                Route::post('{contentProduction}/article/quality/{qualityReport}/repair', [ContentArticleController::class, 'repairQuality'])
-                    ->middleware('admin.super')->name('article.quality.repair');
-                Route::post('{contentProduction}/article/revisions', [ContentArticleController::class, 'revise'])
-                    ->middleware('admin.super')->name('article.revisions.store');
-            });
-
-        // 兼容早期“内容项目”入口；新界面统一使用“文章工作单”。
-        Route::get('content-projects', fn () => redirect()->route('admin.content-productions.index'))->name('content-projects.index');
-
-        Route::prefix('content-topics')
-            ->name('content-topics.')
-            ->middleware(['admin.super', 'content.production.enabled'])
-            ->group(function () {
-                Route::get('/', [ContentTopicController::class, 'index'])->name('index');
-                Route::get('create', [ContentTopicController::class, 'create'])->name('create');
-                Route::post('/', [ContentTopicController::class, 'store'])->name('store');
-                Route::get('{contentTopic}', [ContentTopicController::class, 'show'])->name('show');
-                Route::get('{contentTopic}/edit', [ContentTopicController::class, 'edit'])->name('edit');
-                Route::put('{contentTopic}', [ContentTopicController::class, 'update'])->name('update');
-                Route::post('{contentTopic}/ideas', [ContentTopicController::class, 'storeIdea'])->name('ideas.store');
-                Route::put('{contentTopic}/ideas/{contentTopicIdea}', [ContentTopicController::class, 'updateIdea'])->name('ideas.update');
-            });
-
-        Route::prefix('content-operations')->name('content-operations.')
-            ->middleware(['admin.super', 'content.production.enabled'])
-            ->group(function (): void {
-                Route::get('/', [ContentOperationsController::class, 'index'])->name('index');
-                Route::get('metrics.json', [ContentOperationsController::class, 'json'])->name('json');
-            });
-
-        Route::prefix('content-automations')
-            ->name('content-automations.')
-            ->middleware(['admin.super', 'content.production.enabled'])
-            ->group(function () {
-                Route::get('/', [TaskAutomationController::class, 'index'])->name('index');
-                Route::get('{task}/edit', [TaskAutomationController::class, 'edit'])->name('edit');
-                Route::put('{task}', [TaskAutomationController::class, 'update'])->name('update');
-                Route::post('{task}/pause', [TaskAutomationController::class, 'pause'])->name('pause');
-                Route::post('{task}/resume', [TaskAutomationController::class, 'resume'])->name('resume');
-                Route::post('{task}/run-now', [TaskAutomationController::class, 'runNow'])->name('run-now');
-                Route::post('{task}/schedules/{taskSchedule}/retry', [TaskAutomationController::class, 'retry'])->name('retry');
-                Route::post('{task}/fallback', [TaskAutomationController::class, 'fallback'])->name('fallback');
-            });
-
-        // 保持旧链接可用，同时让界面术语收敛为“生产计划”。
-        Route::get('daily-content-production', fn () => redirect()->route('admin.content-automations.index'))->name('daily-content-production.index');
 
         // 栏目管理（保持 geo_admin/categories 路径语义）
         Route::prefix('categories')->name('categories.')->group(function () {
@@ -372,60 +379,89 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
         });
 
         // 素材管理：作者管理
-        Route::prefix('authors')->name('authors.')->group(function () {
-            Route::get('/', [AuthorController::class, 'index'])->name('index');
-            Route::get('create', [AuthorController::class, 'create'])->name('create');
-            Route::post('create', [AuthorController::class, 'store'])->name('store');
-            Route::get('{authorId}/edit', [AuthorController::class, 'edit'])->name('edit');
-            Route::get('{authorId}/detail', [AuthorController::class, 'detail'])->name('detail');
-            Route::put('{authorId}', [AuthorController::class, 'update'])->name('update');
-            Route::post('{authorId}/delete', [AuthorController::class, 'destroy'])->name('delete');
-        });
+        Route::prefix('authors')
+            ->name('authors.')
+            ->where(['authorId' => '[1-9][0-9]{0,17}'])
+            ->group(function () {
+                Route::get('/', [AuthorController::class, 'index'])->name('index');
+                Route::get('create', [AuthorController::class, 'create'])->name('create');
+                Route::post('create', [AuthorController::class, 'store'])->name('store');
+                Route::get('{authorId}/edit', [AuthorController::class, 'edit'])->name('edit');
+                Route::get('{authorId}/detail', [AuthorController::class, 'detail'])->name('detail');
+                Route::put('{authorId}', [AuthorController::class, 'update'])->name('update');
+                Route::post('{authorId}/delete', [AuthorController::class, 'destroy'])->name('delete');
+            });
 
         // 素材管理：关键词库管理
-        Route::prefix('keyword-libraries')->name('keyword-libraries.')->group(function () {
-            Route::get('/', [KeywordLibraryController::class, 'index'])->name('index');
-            Route::get('create', [KeywordLibraryController::class, 'create'])->name('create');
-            Route::post('create', [KeywordLibraryController::class, 'store'])->name('store');
-            Route::get('{libraryId}/edit', [KeywordLibraryController::class, 'edit'])->name('edit');
-            Route::get('{libraryId}/detail', [KeywordLibraryController::class, 'detail'])->name('detail');
-            Route::post('{libraryId}/keywords', [KeywordLibraryController::class, 'storeKeyword'])->name('keywords.store');
-            Route::post('{libraryId}/keywords/delete', [KeywordLibraryController::class, 'destroyKeywords'])->name('keywords.delete');
-            Route::post('{libraryId}/import', [KeywordLibraryController::class, 'importKeywords'])->name('import');
-            Route::put('{libraryId}/detail', [KeywordLibraryController::class, 'updateFromDetail'])->name('detail.update');
-            Route::put('{libraryId}', [KeywordLibraryController::class, 'update'])->name('update');
-            Route::post('{libraryId}/delete', [KeywordLibraryController::class, 'destroy'])->name('delete');
-        });
+        Route::prefix('keyword-libraries')
+            ->name('keyword-libraries.')
+            ->where(['libraryId' => '[1-9][0-9]{0,17}'])
+            ->group(function () {
+                Route::get('/', [KeywordLibraryController::class, 'index'])->name('index');
+                Route::get('create', [KeywordLibraryController::class, 'create'])->name('create');
+                Route::post('create', [KeywordLibraryController::class, 'store'])->name('store');
+                Route::get('{libraryId}/edit', [KeywordLibraryController::class, 'edit'])->name('edit');
+                Route::get('{libraryId}/detail', [KeywordLibraryController::class, 'detail'])->name('detail');
+                Route::get('{libraryId}/keywords/create', [KeywordLibraryController::class, 'createKeyword'])->name('keywords.create');
+                Route::post('{libraryId}/keywords', [KeywordLibraryController::class, 'storeKeyword'])->name('keywords.store');
+                Route::post('{libraryId}/keywords/delete', [KeywordLibraryController::class, 'destroyKeywords'])->name('keywords.delete');
+                Route::get('{libraryId}/import', [KeywordLibraryController::class, 'createImport'])->name('import.create');
+                Route::post('{libraryId}/import', [KeywordLibraryController::class, 'importKeywords'])->name('import');
+                Route::put('{libraryId}/detail', [KeywordLibraryController::class, 'updateFromDetail'])->name('detail.update');
+                Route::put('{libraryId}', [KeywordLibraryController::class, 'update'])->name('update');
+                Route::post('{libraryId}/delete', [KeywordLibraryController::class, 'destroy'])->name('delete');
+            });
 
         // 素材管理：标题库管理
-        Route::prefix('title-libraries')->name('title-libraries.')->group(function () {
-            Route::get('/', [TitleLibraryController::class, 'index'])->name('index');
-            Route::get('create', [TitleLibraryController::class, 'create'])->name('create');
-            Route::post('create', [TitleLibraryController::class, 'store'])->name('store');
-            Route::get('{libraryId}/edit', [TitleLibraryController::class, 'edit'])->name('edit');
-            Route::get('{libraryId}/detail', [TitleLibraryController::class, 'detail'])->name('detail');
-            Route::post('{libraryId}/titles', [TitleLibraryController::class, 'storeTitle'])->name('titles.store');
-            Route::post('{libraryId}/titles/delete', [TitleLibraryController::class, 'destroyTitles'])->name('titles.delete');
-            Route::post('{libraryId}/import', [TitleLibraryController::class, 'importTitles'])->name('import');
-            Route::get('{libraryId}/ai-generate', [TitleLibraryController::class, 'aiGenerate'])->name('ai-generate');
-            Route::post('{libraryId}/ai-generate', [TitleLibraryController::class, 'generateWithAi'])->name('ai-generate.submit');
-            Route::put('{libraryId}', [TitleLibraryController::class, 'update'])->name('update');
-            Route::post('{libraryId}/delete', [TitleLibraryController::class, 'destroy'])->name('delete');
-        });
+        Route::prefix('title-libraries')
+            ->name('title-libraries.')
+            ->where([
+                'libraryId' => '[1-9][0-9]{0,17}',
+                'runId' => '[1-9][0-9]{0,17}',
+            ])
+            ->group(function () {
+                Route::get('/', [TitleLibraryController::class, 'index'])->name('index');
+                Route::get('create', [TitleLibraryController::class, 'create'])->name('create');
+                Route::post('create', [TitleLibraryController::class, 'store'])->name('store');
+                Route::get('{libraryId}/edit', [TitleLibraryController::class, 'edit'])->name('edit');
+                Route::get('{libraryId}/detail', [TitleLibraryController::class, 'detail'])->name('detail');
+                Route::get('{libraryId}/titles/create', [TitleLibraryController::class, 'createTitle'])->name('titles.create');
+                Route::post('{libraryId}/titles', [TitleLibraryController::class, 'storeTitle'])->name('titles.store');
+                Route::post('{libraryId}/titles/delete', [TitleLibraryController::class, 'destroyTitles'])->name('titles.delete');
+                Route::get('{libraryId}/import', [TitleLibraryController::class, 'createImport'])->name('import.create');
+                Route::post('{libraryId}/import', [TitleLibraryController::class, 'importTitles'])->name('import');
+                Route::get('{libraryId}/ai-generate', [TitleLibraryController::class, 'aiGenerate'])->name('ai-generate');
+                Route::post('{libraryId}/ai-generate', [TitleLibraryController::class, 'generateWithAi'])
+                    ->middleware('throttle:title-generation-submissions')
+                    ->name('ai-generate.submit');
+                Route::get('{libraryId}/ai-generation-runs/{runId}/status', [TitleLibraryController::class, 'generationStatus'])
+                    ->name('ai-generate.status');
+                Route::post('{libraryId}/ai-generation-runs/{runId}/retry', [TitleLibraryController::class, 'retryGeneration'])
+                    ->middleware('throttle:title-generation-submissions')
+                    ->name('ai-generate.retry');
+                Route::post('{libraryId}/ai-generation-runs/{runId}/cancel', [TitleLibraryController::class, 'cancelGeneration'])
+                    ->name('ai-generate.cancel');
+                Route::put('{libraryId}', [TitleLibraryController::class, 'update'])->name('update');
+                Route::post('{libraryId}/delete', [TitleLibraryController::class, 'destroy'])->name('delete');
+            });
 
         // 素材管理：图片库管理
-        Route::prefix('image-libraries')->name('image-libraries.')->group(function () {
-            Route::get('/', [ImageLibraryController::class, 'index'])->name('index');
-            Route::get('create', [ImageLibraryController::class, 'create'])->name('create');
-            Route::post('create', [ImageLibraryController::class, 'store'])->name('store');
-            Route::get('{libraryId}/edit', [ImageLibraryController::class, 'edit'])->name('edit');
-            Route::get('{libraryId}/detail', [ImageLibraryController::class, 'detail'])->name('detail');
-            Route::post('{libraryId}/images/upload', [ImageLibraryController::class, 'uploadImages'])->name('images.upload');
-            Route::post('{libraryId}/images/delete', [ImageLibraryController::class, 'destroyImages'])->name('images.delete');
-            Route::put('{libraryId}/detail', [ImageLibraryController::class, 'updateFromDetail'])->name('detail.update');
-            Route::put('{libraryId}', [ImageLibraryController::class, 'update'])->name('update');
-            Route::post('{libraryId}/delete', [ImageLibraryController::class, 'destroy'])->name('delete');
-        });
+        Route::prefix('image-libraries')
+            ->name('image-libraries.')
+            ->where(['libraryId' => '[1-9][0-9]{0,17}'])
+            ->group(function () {
+                Route::get('/', [ImageLibraryController::class, 'index'])->name('index');
+                Route::get('create', [ImageLibraryController::class, 'create'])->name('create');
+                Route::post('create', [ImageLibraryController::class, 'store'])->name('store');
+                Route::get('{libraryId}/edit', [ImageLibraryController::class, 'edit'])->name('edit');
+                Route::get('{libraryId}/detail', [ImageLibraryController::class, 'detail'])->name('detail');
+                Route::get('{libraryId}/images/upload', [ImageLibraryController::class, 'createImageUpload'])->name('images.create');
+                Route::post('{libraryId}/images/upload', [ImageLibraryController::class, 'uploadImages'])->name('images.upload');
+                Route::post('{libraryId}/images/delete', [ImageLibraryController::class, 'destroyImages'])->name('images.delete');
+                Route::put('{libraryId}/detail', [ImageLibraryController::class, 'updateFromDetail'])->name('detail.update');
+                Route::put('{libraryId}', [ImageLibraryController::class, 'update'])->name('update');
+                Route::post('{libraryId}/delete', [ImageLibraryController::class, 'destroy'])->name('delete');
+            });
 
         // 素材管理：知识库管理
         Route::prefix('knowledge-bases')->name('knowledge-bases.')->group(function () {
@@ -434,8 +470,41 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::post('create', [KnowledgeBaseController::class, 'store'])->name('store');
             Route::get('{knowledgeBaseId}/edit', [KnowledgeBaseController::class, 'edit'])->name('edit');
             Route::get('{knowledgeBaseId}/detail', [KnowledgeBaseController::class, 'detail'])->name('detail');
+            Route::get('{knowledgeBaseId}/chunks', [KnowledgeBaseController::class, 'chunks'])
+                ->name('chunks.index')->whereNumber('knowledgeBaseId');
             Route::post('upload', [KnowledgeBaseController::class, 'uploadFile'])->name('upload');
             Route::post('{knowledgeBaseId}/chunks/refresh', [KnowledgeBaseController::class, 'refreshChunks'])->name('chunks.refresh');
+            Route::post('{knowledgeBaseId}/revisions/{revisionId}/restore', [KnowledgeBaseController::class, 'restoreRevision'])
+                ->name('revisions.restore')
+                ->whereNumber(['knowledgeBaseId', 'revisionId']);
+            Route::post('{knowledgeBaseId}/official/adopt', [KnowledgeBaseController::class, 'adoptOfficial'])
+                ->name('official.adopt')
+                ->whereNumber('knowledgeBaseId');
+            Route::post('{knowledgeBaseId}/media', [KnowledgeBaseMediaController::class, 'store'])
+                ->name('media.store')->whereNumber('knowledgeBaseId');
+            Route::put('{knowledgeBaseId}/media/{mediaAsset}', [KnowledgeBaseMediaController::class, 'update'])
+                ->name('media.update')->whereNumber(['knowledgeBaseId', 'mediaAsset']);
+            Route::post('{knowledgeBaseId}/media/{mediaAsset}/replace', [KnowledgeBaseMediaController::class, 'replace'])
+                ->name('media.replace')->whereNumber(['knowledgeBaseId', 'mediaAsset']);
+            Route::post('{knowledgeBaseId}/media/{mediaAsset}/toggle', [KnowledgeBaseMediaController::class, 'toggle'])
+                ->name('media.toggle')->whereNumber(['knowledgeBaseId', 'mediaAsset']);
+            Route::get('{knowledgeBaseId}/facts', [KnowledgeFactController::class, 'index'])->name('facts.index')->whereNumber('knowledgeBaseId');
+            Route::post('{knowledgeBaseId}/facts', [KnowledgeFactController::class, 'store'])->name('facts.store')->whereNumber('knowledgeBaseId');
+            Route::put('{knowledgeBaseId}/facts/{factId}', [KnowledgeFactController::class, 'update'])->name('facts.update')->whereNumber(['knowledgeBaseId', 'factId']);
+            Route::post('{knowledgeBaseId}/facts/{factId}/review', [KnowledgeFactController::class, 'review'])->name('facts.review')->whereNumber(['knowledgeBaseId', 'factId']);
+            Route::post('{knowledgeBaseId}/facts/{factId}/archive', [KnowledgeFactController::class, 'archive'])->name('facts.archive')->whereNumber(['knowledgeBaseId', 'factId']);
+            Route::post('{knowledgeBaseId}/facts/{factId}/values', [KnowledgeFactController::class, 'storeValue'])->name('fact-values.store')->whereNumber(['knowledgeBaseId', 'factId']);
+            Route::put('{knowledgeBaseId}/fact-values/{valueId}', [KnowledgeFactController::class, 'updateValue'])->name('fact-values.update')->whereNumber(['knowledgeBaseId', 'valueId']);
+            Route::post('{knowledgeBaseId}/fact-values/{valueId}/archive', [KnowledgeFactController::class, 'archiveValue'])->name('fact-values.archive')->whereNumber(['knowledgeBaseId', 'valueId']);
+            Route::post('{knowledgeBaseId}/fact-values/{valueId}/evidences', [KnowledgeFactController::class, 'storeEvidence'])->name('fact-evidences.store')->whereNumber(['knowledgeBaseId', 'valueId']);
+            Route::post('{knowledgeBaseId}/facts/{factId}/merge', [KnowledgeFactController::class, 'merge'])->name('facts.merge')->whereNumber(['knowledgeBaseId', 'factId']);
+            Route::post('{knowledgeBaseId}/facts/{factId}/split', [KnowledgeFactController::class, 'split'])->name('facts.split')->whereNumber(['knowledgeBaseId', 'factId']);
+            Route::post('{knowledgeBaseId}/facts/publish', [KnowledgeFactController::class, 'publish'])->name('facts.publish')->whereNumber('knowledgeBaseId');
+            Route::post('{knowledgeBaseId}/fact-revisions/{revisionId}/restore', [KnowledgeFactController::class, 'restore'])->name('fact-revisions.restore')->whereNumber(['knowledgeBaseId', 'revisionId']);
+            Route::post('{knowledgeBaseId}/fact-generation', [KnowledgeFactGenerationController::class, 'store'])->name('fact-generation.store')->whereNumber('knowledgeBaseId')->middleware('throttle:admin-sensitive');
+            Route::get('{knowledgeBaseId}/fact-generation/{runId}', [KnowledgeFactGenerationController::class, 'show'])->name('fact-generation.show')->whereNumber(['knowledgeBaseId', 'runId']);
+            Route::post('{knowledgeBaseId}/fact-generation/{runId}/cancel', [KnowledgeFactGenerationController::class, 'cancel'])->name('fact-generation.cancel')->whereNumber(['knowledgeBaseId', 'runId'])->middleware('throttle:admin-sensitive');
+            Route::post('{knowledgeBaseId}/fact-generation/{runId}/resolve', [KnowledgeFactGenerationController::class, 'resolve'])->name('fact-generation.resolve')->whereNumber(['knowledgeBaseId', 'runId'])->middleware('throttle:admin-sensitive');
             Route::put('{knowledgeBaseId}/detail', [KnowledgeBaseController::class, 'updateFromDetail'])->name('detail.update');
             Route::put('{knowledgeBaseId}', [KnowledgeBaseController::class, 'update'])->name('update');
             Route::post('{knowledgeBaseId}/delete', [KnowledgeBaseController::class, 'destroy'])->name('delete');
@@ -484,17 +553,44 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::get('ai-configurator', [LegacyController::class, 'aiConfigurator'])->name('ai.configurator');
             Route::prefix('ai-models')->name('ai-models.')->group(function () {
                 Route::get('/', [AiModelController::class, 'index'])->name('index');
+                Route::get('create', [AiModelController::class, 'create'])->name('create');
                 Route::post('create', [AiModelController::class, 'store'])->name('store');
-                Route::put('{modelId}', [AiModelController::class, 'update'])->name('update');
-                Route::post('{modelId}/test', [AiModelController::class, 'testConnection'])->name('test');
-                Route::post('{modelId}/delete', [AiModelController::class, 'destroy'])->name('delete');
+                Route::get('{modelId}/edit', [AiModelController::class, 'edit'])->name('edit')->whereNumber('modelId');
+                Route::put('{modelId}', [AiModelController::class, 'update'])->name('update')->whereNumber('modelId');
+                Route::post('{modelId}/test', [AiModelController::class, 'testConnection'])
+                    ->middleware('throttle:admin-sensitive')
+                    ->name('test')
+                    ->whereNumber('modelId');
+                Route::post('{modelId}/delete', [AiModelController::class, 'destroy'])->name('delete')->whereNumber('modelId');
                 Route::post('default-embedding', [AiModelController::class, 'updateDefaultEmbedding'])->name('default-embedding');
                 Route::post('chunking-config', [AiModelController::class, 'updateChunkingConfig'])->name('chunking-config');
             });
+            Route::prefix('ai-source-providers')
+                ->name('ai-source-providers.')
+                ->where(['providerId' => '[1-9][0-9]{0,17}'])
+                ->group(function () {
+                    Route::get('/', [AiSourceProviderController::class, 'index'])->name('index');
+                    Route::get('create', [AiSourceProviderController::class, 'create'])->name('create');
+                    Route::post('/', [AiSourceProviderController::class, 'store'])->name('store');
+                    Route::get('{providerId}/edit', [AiSourceProviderController::class, 'edit'])->name('edit');
+                    Route::put('{providerId}', [AiSourceProviderController::class, 'update'])->name('update');
+                    Route::post('{providerId}/test', [AiSourceProviderController::class, 'testProvider'])
+                        ->middleware('throttle:admin-sensitive')
+                        ->name('test');
+                    Route::post('{providerId}/delete', [AiSourceProviderController::class, 'destroy'])->name('delete');
+                    Route::post('model-bindings', [AiSourceProviderController::class, 'updateModelBindings'])->name('model-bindings');
+                    Route::post('model-bindings/upsert-api', [AiSourceProviderController::class, 'upsertModelApi'])->name('model-bindings.upsert-api');
+                    Route::post('model-bindings/test', [AiSourceProviderController::class, 'testModelBinding'])
+                        ->middleware('throttle:admin-sensitive')
+                        ->name('model-bindings.test');
+                });
             Route::get('ai-prompts', [AiPromptController::class, 'index'])->name('ai-prompts');
+            Route::get('ai-prompts/create', [AiPromptController::class, 'create'])->name('ai-prompts.create');
             Route::post('ai-prompts/create', [AiPromptController::class, 'store'])->name('ai-prompts.store');
-            Route::put('ai-prompts/{promptId}', [AiPromptController::class, 'update'])->name('ai-prompts.update');
-            Route::post('ai-prompts/{promptId}/delete', [AiPromptController::class, 'destroy'])->name('ai-prompts.delete');
+            Route::get('ai-prompts/{promptId}/edit', [AiPromptController::class, 'edit'])->name('ai-prompts.edit')->whereNumber('promptId');
+            Route::post('ai-prompts/{promptId}/copy', [AiPromptController::class, 'copy'])->name('ai-prompts.copy')->whereNumber('promptId');
+            Route::put('ai-prompts/{promptId}', [AiPromptController::class, 'update'])->name('ai-prompts.update')->whereNumber('promptId');
+            Route::post('ai-prompts/{promptId}/delete', [AiPromptController::class, 'destroy'])->name('ai-prompts.delete')->whereNumber('promptId');
             Route::get('ai-special-prompts', [AiSpecialPromptController::class, 'index'])->name('ai-special-prompts');
             Route::post('ai-special-prompts/keyword', [AiSpecialPromptController::class, 'updateKeyword'])->name('ai-special-prompts.keyword');
             Route::post('ai-special-prompts/description', [AiSpecialPromptController::class, 'updateDescription'])->name('ai-special-prompts.description');
@@ -504,6 +600,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::get('/', [SiteSettingsController::class, 'index'])->name('index');
             Route::post('/', [SiteSettingsController::class, 'update'])->name('update');
             Route::post('theme', [SiteSettingsController::class, 'updateTheme'])->name('theme');
+            Route::get('homepage-modules', [SiteSettingsController::class, 'editHomepageModules'])->name('homepage-modules.edit');
             Route::post('homepage-modules', [SiteSettingsController::class, 'updateHomepageModules'])->name('homepage-modules');
             Route::post('homepage-modules/preset', [SiteSettingsController::class, 'applyHomepageModulePreset'])->name('homepage-modules.preset');
             Route::post('homepage-modules/import', [SiteSettingsController::class, 'importHomepageModuleDesign'])->name('homepage-modules.import');
@@ -570,19 +667,36 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
 
         // 超级管理员功能
         Route::middleware('admin.super')->group(function () {
-            Route::prefix('admin-users')->name('admin-users.')->group(function () {
-                Route::get('/', [AdminUserController::class, 'index'])->name('index');
-                Route::post('create', [AdminUserController::class, 'store'])->name('store');
-                Route::post('{adminId}/update', [AdminUserController::class, 'update'])->name('update');
-                Route::post('{adminId}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('toggle-status');
-                Route::post('{adminId}/delete', [AdminUserController::class, 'destroy'])->name('delete');
-            });
+            Route::prefix('admin-users')
+                ->name('admin-users.')
+                ->where(['adminId' => '[1-9][0-9]{0,17}'])
+                ->group(function () {
+                    Route::get('/', [AdminUserController::class, 'index'])->name('index');
+                    Route::get('create', [AdminUserController::class, 'create'])->name('create');
+                    Route::post('create', [AdminUserController::class, 'store'])->name('store');
+                    Route::get('{adminId}/edit', [AdminUserController::class, 'edit'])->name('edit');
+                    Route::post('{adminId}/update', [AdminUserController::class, 'update'])->name('update');
+                    Route::post('{adminId}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('toggle-status');
+                    Route::post('{adminId}/delete', [AdminUserController::class, 'destroy'])->name('delete');
+                });
             Route::get('admin-activity-logs', [AdminActivityLogController::class, 'index'])->name('admin-activity-logs');
             Route::prefix('api-tokens')->name('api-tokens.')->group(function () {
                 Route::get('/', [ApiTokenController::class, 'index'])->name('index');
-                Route::post('/', [ApiTokenController::class, 'store'])->name('store');
+                Route::post('/', [ApiTokenController::class, 'store'])->middleware('throttle:admin-sensitive')->name('store');
                 Route::post('{tokenId}/revoke', [ApiTokenController::class, 'revoke'])->name('revoke');
             });
         });
     });
 });
+
+require __DIR__.'/content-production.php';
+
+$adminUiRegistry = app(AdminUiRegistry::class);
+foreach (Route::getRoutes() as $adminRoute) {
+    $routeName = $adminRoute->getName();
+    if (is_string($routeName)
+        && in_array('GET', $adminRoute->methods(), true)
+        && $adminUiRegistry->shouldRememberRoute($routeName)) {
+        $adminRoute->block(30, 30);
+    }
+}

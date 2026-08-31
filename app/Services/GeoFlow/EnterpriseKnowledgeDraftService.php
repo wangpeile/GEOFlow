@@ -3,13 +3,16 @@
 namespace App\Services\GeoFlow;
 
 use App\Ai\Agents\MarkdownContentWriterAgent;
+use App\Models\Admin;
 use App\Models\AiModel;
 use App\Models\EnterpriseKnowledgeProject;
+use App\Models\EnterpriseKnowledgeRevision;
 use App\Models\KnowledgeBase;
 use App\Support\GeoFlow\ApiKeyCrypto;
 use App\Support\GeoFlow\OpenAiRuntimeProvider;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Throwable;
@@ -69,8 +72,34 @@ final class EnterpriseKnowledgeDraftService
 
     public function __construct(
         private readonly ApiKeyCrypto $apiKeyCrypto,
-        private readonly KnowledgeChunkSyncService $chunkSyncService,
+        private readonly KnowledgeChunkSyncCoordinator $chunkSyncCoordinator,
+        private readonly AiUsageQuotaService $usageQuota,
     ) {}
+
+    /** @param array<string,mixed> $data */
+    public function createWorkspaceDraft(array $data, Admin $admin): EnterpriseKnowledgeProject
+    {
+        return DB::transaction(function () use ($data, $admin): EnterpriseKnowledgeProject {
+            $content = trim((string) ($data['content'] ?? ''));
+            $project = EnterpriseKnowledgeProject::query()->create([
+                'name' => trim((string) ($data['name'] ?? '')),
+                'description' => trim((string) ($data['description'] ?? '')),
+                'status' => 'draft',
+                'draft_content' => $content,
+                'created_by_admin_id' => (int) $admin->id,
+            ]);
+            EnterpriseKnowledgeRevision::query()->create([
+                'enterprise_knowledge_project_id' => (int) $project->id,
+                'content' => $content,
+                'summary' => 'AI 工作台创建的初始草稿',
+                'source' => 'ai_workspace',
+                'created_by_admin_id' => (int) $admin->id,
+                'content_hash' => hash('sha256', $content),
+            ]);
+
+            return $project;
+        });
+    }
 
     /**
      * @return array{content:string,source:string,model_id:?int,error:?string}
@@ -249,17 +278,17 @@ final class EnterpriseKnowledgeDraftService
             $knowledgeBase = KnowledgeBase::query()->create($payload);
         }
 
-        $chunkCount = 0;
         $chunkError = null;
         try {
-            $chunkCount = $this->chunkSyncService->sync((int) $knowledgeBase->id, $content);
+            $this->chunkSyncCoordinator->request((int) $knowledgeBase->id, force: true);
         } catch (Throwable $exception) {
+            report($exception);
             $chunkError = $exception->getMessage();
         }
 
         return [
             'knowledge_base' => $knowledgeBase,
-            'chunk_count' => $chunkCount,
+            'chunk_count' => 0,
             'chunk_error' => $chunkError,
         ];
     }
@@ -286,7 +315,7 @@ PROMPT;
     /**
      * @param  list<array{name:string,type:string,content:string,characters:int}>  $sourceBlocks
      * @param  list<array{text:string,section:string}>  $sourceFacts
-     * @param  array{provider:string,model_id:string,base_url:string}  $runtime
+     * @param  array{provider:string,model_id:string,base_url:string,model:AiModel}  $runtime
      */
     private function generateAiDraftContent(
         EnterpriseKnowledgeProject $project,
@@ -309,7 +338,7 @@ PROMPT;
 
     /**
      * @param  list<array{name:string,type:string,content:string,characters:int}>  $sourceBlocks
-     * @param  array{provider:string,model_id:string,base_url:string}  $runtime
+     * @param  array{provider:string,model_id:string,base_url:string,model:AiModel}  $runtime
      */
     private function generateSingleAiDraft(
         EnterpriseKnowledgeProject $project,
@@ -318,20 +347,18 @@ PROMPT;
         array $runtime
     ): string {
         $agent = new MarkdownContentWriterAgent($this->buildSystemPrompt(), [], [], 6000);
-        $response = $agent->prompt(
-            $this->buildUserPrompt($project, $sourceText, $sourceBlocks),
-            [],
-            (string) $runtime['provider'],
-            (string) $runtime['model_id']
-        );
 
-        return trim(OpenAiRuntimeProvider::normalizeGeneratedText($this->responseText($response)));
+        return $this->promptWithQuota(
+            $agent,
+            $this->buildUserPrompt($project, $sourceText, $sourceBlocks),
+            $runtime,
+        );
     }
 
     /**
      * @param  list<array{name:string,type:string,content:string,characters:int}>  $sourceBlocks
      * @param  list<array{text:string,section:string}>  $sourceFacts
-     * @param  array{provider:string,model_id:string,base_url:string}  $runtime
+     * @param  array{provider:string,model_id:string,base_url:string,model:AiModel}  $runtime
      */
     private function generateModularAiDraft(
         EnterpriseKnowledgeProject $project,
@@ -342,16 +369,11 @@ PROMPT;
         $sections = [];
         foreach (self::DRAFT_MODULES as $module) {
             $agent = new MarkdownContentWriterAgent($this->buildSystemPrompt(), [], [], 4200);
-            $response = $agent->prompt(
+            $moduleContent = $this->promptWithQuota(
+                $agent,
                 $this->buildModuleUserPrompt($project, $sourceBlocks, $sourceFacts, $module),
-                [],
-                (string) $runtime['provider'],
-                (string) $runtime['model_id']
+                $runtime,
             );
-            $moduleContent = trim(OpenAiRuntimeProvider::normalizeGeneratedText($this->responseText($response)));
-            if ($moduleContent === '') {
-                throw new \RuntimeException(__('admin.enterprise_knowledge.error.ai_empty'));
-            }
             $noiseResidues = $this->draftNoiseResidues($moduleContent);
             if ($noiseResidues !== []) {
                 throw new \RuntimeException(__('admin.enterprise_knowledge.error.ai_noise', [
@@ -1146,18 +1168,13 @@ MARKDOWN;
                     ->orWhere('model_type', '')
                     ->orWhere('model_type', 'chat');
             })
-            ->where(function ($query): void {
-                $query->whereNull('daily_limit')
-                    ->orWhere('daily_limit', 0)
-                    ->orWhereColumn('used_today', '<', 'daily_limit');
-            })
             ->orderBy('failover_priority')
             ->orderBy('id')
             ->get();
     }
 
     /**
-     * @return array{provider:string,model_id:string,base_url:string}
+     * @return array{provider:string,model_id:string,base_url:string,model:AiModel}
      */
     private function prepareAiRuntime(AiModel $model): array
     {
@@ -1180,6 +1197,39 @@ MARKDOWN;
             'provider' => $provider,
             'model_id' => (string) $model->model_id,
             'base_url' => $providerUrl,
+            'model' => $model,
         ];
+    }
+
+    /**
+     * @param  array{provider:string,model_id:string,base_url:string,model:AiModel}  $runtime
+     */
+    private function promptWithQuota(MarkdownContentWriterAgent $agent, string $prompt, array $runtime): string
+    {
+        $reservation = $this->usageQuota->reserveModel($runtime['model']);
+        if ($reservation === null) {
+            throw new \RuntimeException('AI model has reached its daily usage limit.');
+        }
+
+        try {
+            $response = $agent->prompt(
+                $prompt,
+                [],
+                (string) $runtime['provider'],
+                (string) $runtime['model_id'],
+            );
+            $content = trim(OpenAiRuntimeProvider::normalizeGeneratedText($this->responseText($response)));
+            if ($content === '') {
+                throw new \RuntimeException(__('admin.enterprise_knowledge.error.ai_empty'));
+            }
+        } catch (Throwable $exception) {
+            $this->usageQuota->releaseModel($reservation);
+
+            throw $exception;
+        }
+
+        $this->usageQuota->recordModelSuccess($reservation);
+
+        return $content;
     }
 }

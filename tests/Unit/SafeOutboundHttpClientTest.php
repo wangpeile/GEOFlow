@@ -25,6 +25,7 @@ use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Request as LaravelRequest;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -252,10 +253,12 @@ class SafeOutboundHttpClientTest extends TestCase
     #[Test]
     public function the_system_resolver_follows_cnames_and_collects_a_and_aaaa_records(): void
     {
-        $resolver = new SystemHostResolver(static fn (string $host, int $type): array => match ([$host, $type]) {
-            ['alias.example', DNS_CNAME] => [['type' => 'CNAME', 'target' => 'edge.example']],
-            ['edge.example', DNS_A] => [['type' => 'A', 'ip' => '93.184.216.34']],
-            ['edge.example', DNS_AAAA] => [['type' => 'AAAA', 'ipv6' => '2606:2800:220:1:248:1893:25c8:1946']],
+        $resolver = new SystemHostResolver(static fn (string $host): array => match ($host) {
+            'alias.example' => [['type' => 'CNAME', 'target' => 'edge.example']],
+            'edge.example' => [
+                ['type' => 'A', 'ip' => '93.184.216.34'],
+                ['type' => 'AAAA', 'ipv6' => '2606:2800:220:1:248:1893:25c8:1946'],
+            ],
             default => [],
         });
 
@@ -266,19 +269,45 @@ class SafeOutboundHttpClientTest extends TestCase
     }
 
     #[Test]
-    public function the_system_resolver_keeps_valid_a_records_when_aaaa_lookup_fails(): void
+    public function the_system_resolver_uses_addresses_returned_with_a_cname_without_requerying_the_target(): void
     {
-        $resolver = new SystemHostResolver(static function (string $host, int $type): array {
-            if ($type === DNS_AAAA) {
-                throw new \RuntimeException('temporary DNS server failure');
-            }
+        $lookups = [];
+        $resolver = new SystemHostResolver(static function (string $host) use (&$lookups): array {
+            $lookups[] = $host;
 
-            return $type === DNS_A
-                ? [['type' => 'A', 'ip' => '47.94.198.142']]
-                : [];
+            return match ($host) {
+                'api.example' => [
+                    ['type' => 'CNAME', 'target' => 'edge.example'],
+                    ['type' => 'A', 'ip' => '93.184.216.34'],
+                    ['type' => 'AAAA', 'ipv6' => '2606:2800:220:1:248:1893:25c8:1946'],
+                ],
+                default => throw new \RuntimeException('The alias target should not be queried when glue addresses are present.'),
+            };
         });
 
-        $this->assertSame(['47.94.198.142'], $resolver->resolve('redwhalertc.com'));
+        $this->assertSame(
+            ['93.184.216.34', '2606:2800:220:1:248:1893:25c8:1946'],
+            $resolver->resolve('api.example')
+        );
+        $this->assertSame(['api.example'], $lookups);
+    }
+
+    #[Test]
+    public function the_system_resolver_skips_slow_cname_queries_when_direct_dns_records_exist(): void
+    {
+        $recordTypes = [];
+        $resolver = new SystemHostResolver(null, static function (string $host, int $type) use (&$recordTypes): array {
+            $recordTypes[] = $type;
+
+            return match ($type) {
+                DNS_A => [['type' => 'A', 'ip' => '93.184.216.34']],
+                DNS_AAAA => [],
+                default => throw new \RuntimeException('CNAME lookup should be skipped for a directly resolved host.'),
+            };
+        });
+
+        $this->assertSame(['93.184.216.34'], $resolver->resolve('direct.example'));
+        $this->assertSame([DNS_A, DNS_AAAA], $recordTypes);
     }
 
     #[Test]
@@ -400,7 +429,7 @@ class SafeOutboundHttpClientTest extends TestCase
         $this->assertSame('identity', $final['request']->getHeaderLine('Accept-Encoding'));
         $this->assertFalse($final['options']['allow_redirects']);
         $this->assertFalse($final['options']['decode_content']);
-        $this->assertFalse($final['options']['stream']);
+        $this->assertTrue($final['options']['stream']);
         $this->assertTrue($final['options']['verify']);
         $this->assertSame('', $final['options']['proxy']);
         $this->assertSame('v4', $final['options']['force_ip_resolve']);
@@ -556,7 +585,7 @@ class SafeOutboundHttpClientTest extends TestCase
         $this->assertSame('identity', $captured['request']->getHeaderLine('Accept-Encoding'));
         $this->assertFalse($captured['options']['allow_redirects']);
         $this->assertFalse($captured['options']['decode_content']);
-        $this->assertFalse($captured['options']['stream']);
+        $this->assertTrue($captured['options']['stream']);
         $this->assertTrue($captured['options']['verify']);
         $this->assertSame('', $captured['options']['proxy']);
         $this->assertSame(9, $captured['options']['timeout']);
@@ -1291,7 +1320,7 @@ class SafeOutboundHttpClientTest extends TestCase
     }
 
     #[Test]
-    public function direct_http_facade_limits_unknown_size_streaming_responses_while_forcing_the_terminal_to_non_streaming_mode(): void
+    public function direct_http_facade_limits_unknown_size_streaming_responses_without_buffering_the_terminal_response(): void
     {
         config(['geoflow.outbound_ai_max_bytes' => 1024]);
         $terminalStreamOption = null;
@@ -1317,7 +1346,7 @@ class SafeOutboundHttpClientTest extends TestCase
         $response = Http::withOptions(['stream' => true])->get('https://public.test/v1/models');
         $body = $response->toPsrResponse()->getBody();
 
-        $this->assertFalse($terminalStreamOption);
+        $this->assertTrue($terminalStreamOption);
         $this->assertInstanceOf(ResponseSizeLimitedStream::class, $body);
         $this->assertSame(str_repeat('x', 1024), $body->read(1024));
 
@@ -1758,7 +1787,58 @@ class SafeOutboundHttpClientTest extends TestCase
             $this->assertStringNotContainsString('super-secret', $exception->getMessage());
             $this->assertStringNotContainsString('10.0.0.9', $exception->getMessage());
             $this->assertStringNotContainsString('secret.test', $exception->getMessage());
+            $this->assertInstanceOf(\RuntimeException::class, $exception->getPrevious());
+            $this->assertSame(\RuntimeException::class, $exception->causeType);
+            $this->assertStringNotContainsString('TLS failed', (string) $exception->getPrevious()?->getMessage());
+            $this->assertStringNotContainsString('super-secret', (string) $exception->getPrevious()?->getMessage());
         }
+    }
+
+    #[Test]
+    public function transport_timeout_failures_retain_a_safe_machine_readable_category(): void
+    {
+        $exception = new OutboundRequestFailedException(
+            new \RuntimeException('cURL error 28: Operation timed out after 160000 milliseconds api_key=super-secret'),
+        );
+
+        $this->assertSame('timeout', $exception->transportCategory);
+        $this->assertStringNotContainsString('super-secret', $exception->getMessage());
+        $this->assertStringNotContainsString('super-secret', (string) $exception->getPrevious()?->getMessage());
+    }
+
+    #[Test]
+    public function transport_tls_failures_are_not_misclassified_as_dns_errors(): void
+    {
+        $exception = new OutboundRequestFailedException(
+            new \RuntimeException('cURL error 60: certificate validation failed'),
+        );
+
+        $this->assertSame('tls', $exception->transportCategory);
+    }
+
+    #[Test]
+    public function provider_http_failures_retain_safe_status_code_and_quota_category(): void
+    {
+        $response = new Response(new PsrResponse(
+            402,
+            ['Content-Type' => 'application/json'],
+            json_encode([
+                'error' => [
+                    'type' => 'unknown_error',
+                    'code' => 'invalid_request_error',
+                    'message' => 'Insufficient Balance api_key=super-secret',
+                ],
+            ], JSON_THROW_ON_ERROR),
+        ));
+        $exception = new OutboundRequestFailedException(
+            new RequestException($response),
+        );
+
+        $this->assertSame(402, $exception->httpStatus);
+        $this->assertSame('invalid_request_error', $exception->providerCode);
+        $this->assertSame('quota_exhausted', $exception->providerCategory);
+        $this->assertStringNotContainsString('super-secret', $exception->getMessage());
+        $this->assertStringNotContainsString('Insufficient Balance', (string) $exception->getPrevious()?->getMessage());
     }
 
     /** @return array<int, mixed> */

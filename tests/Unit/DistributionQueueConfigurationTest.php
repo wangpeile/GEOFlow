@@ -9,33 +9,18 @@ class DistributionQueueConfigurationTest extends TestCase
     public function test_docker_queue_workers_listen_to_distribution_queue(): void
     {
         $root = dirname(__DIR__, 2);
-        $composeExpectations = [
-            $root.'/docker-compose.yml' => '--queue=geoflow,distribution,theme-replication,default',
-            $root.'/docker-compose.prod.yml' => '--queue=geoflow,distribution,theme-replication,system-updates,default',
-            $root.'/docker-compose.prebuilt.yml' => '--queue=geoflow,distribution,theme-replication,system-updates,default',
+        $composeFiles = [
+            $root.'/docker-compose.yml',
+            $root.'/docker-compose.prod.yml',
         ];
 
-        foreach ($composeExpectations as $composeFile => $expectedQueues) {
+        foreach ($composeFiles as $composeFile) {
             $contents = file_get_contents($composeFile);
             $this->assertIsString($contents);
-            $this->assertStringContainsString($expectedQueues, $contents, basename($composeFile));
-        }
-    }
-
-    public function test_production_workers_use_persistent_redis_and_safe_timeout_ordering(): void
-    {
-        $root = dirname(__DIR__, 2);
-        $environment = file_get_contents($root.'/.env.prod.example');
-
-        $this->assertIsString($environment);
-        $this->assertStringContainsString('REDIS_QUEUE_RETRY_AFTER=960', $environment);
-
-        foreach (['docker-compose.prod.yml', 'docker-compose.prebuilt.yml'] as $composeFile) {
-            $contents = file_get_contents($root.'/'.$composeFile);
-            $this->assertIsString($contents);
-            $this->assertStringContainsString('geoflow-redis-prod-data:/data', $contents, $composeFile);
-            $this->assertStringContainsString('--timeout=900', $contents, $composeFile);
-            $this->assertStringContainsString('AUTO_OPTIMIZE: "false"', $contents, $composeFile);
+            $this->assertStringContainsString('--queue=system-updates,geoflow,distribution,theme-replication,default', $contents, basename($composeFile));
+            $this->assertStringNotContainsString('--queue=ai-workspace-interactive', $contents, basename($composeFile));
+            $this->assertStringNotContainsString('--queue=ai-workspace', $contents, basename($composeFile));
+            $this->assertStringContainsString('--queue=knowledge', $contents, basename($composeFile));
         }
     }
 
@@ -44,7 +29,7 @@ class DistributionQueueConfigurationTest extends TestCase
         $horizon = require dirname(__DIR__, 2).'/config/horizon.php';
 
         $this->assertSame(
-            ['geoflow', 'distribution'],
+            ['system-updates', 'geoflow', 'distribution', 'theme-replication', 'default'],
             $horizon['defaults']['supervisor-1']['queue'] ?? null
         );
     }
@@ -143,5 +128,129 @@ class DistributionQueueConfigurationTest extends TestCase
             'fail "Laravel cannot read migration status or still has pending migrations.',
             $healthcheck
         );
+    }
+
+    public function test_production_lifecycle_excludes_the_retired_application_update_worker(): void
+    {
+        $root = dirname(__DIR__, 2);
+        foreach (['docker-compose.yml', 'docker-compose.prod.yml', 'docker-compose.prebuilt.yml', 'config/horizon.php'] as $file) {
+            $contents = file_get_contents($root.'/'.$file);
+            $this->assertIsString($contents);
+            $this->assertStringNotContainsString('geoflow-system-update-queue-prod', $contents, $file);
+        }
+
+        $deploy = (string) file_get_contents($root.'/deploy-scripts/geoflow-docker-deploy.sh');
+        $healthcheck = (string) file_get_contents($root.'/deploy-scripts/geoflow-healthcheck.sh');
+        $this->assertStringContainsString('geoflow-system-update-queue-prod', $deploy);
+        $this->assertStringContainsString('--remove-orphans', $deploy);
+        $this->assertStringContainsString('geoflow-system-update-queue-prod', $healthcheck);
+        $this->assertStringContainsString('Retired system update worker is still present', $healthcheck);
+    }
+
+    public function test_queue_timeouts_preserve_retry_ordering(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $horizon = require $root.'/config/horizon.php';
+        $queue = require $root.'/config/queue.php';
+
+        $this->assertSame(210, $horizon['defaults']['supervisor-knowledge']['timeout']);
+        $this->assertArrayNotHasKey('supervisor-system-updates', $horizon['defaults']);
+        $this->assertGreaterThan(930, $queue['connections']['redis']['retry_after']);
+        $this->assertGreaterThan(930, $queue['connections']['database']['retry_after']);
+    }
+
+    public function test_deploy_script_matches_secure_cookie_to_public_protocol(): void
+    {
+        $script = file_get_contents(dirname(__DIR__, 2).'/deploy-scripts/geoflow-docker-deploy.sh');
+
+        $this->assertIsString($script);
+        $this->assertStringContainsString('https://*) session_secure_cookie=true', $script);
+        $this->assertStringContainsString('*) session_secure_cookie=false', $script);
+        $this->assertStringContainsString('SESSION_SECURE_COOKIE "$session_secure_cookie"', $script);
+        $this->assertStringContainsString('GEOFLOW_TRUSTED_PROXIES:-REMOTE_ADDR}', $script);
+        $this->assertStringNotContainsString('GEOFLOW_TRUSTED_PROXIES:-*}', $script);
+    }
+
+    public function test_deploy_script_drains_old_services_around_database_migrations(): void
+    {
+        $script = file_get_contents(dirname(__DIR__, 2).'/deploy-scripts/geoflow-docker-deploy.sh');
+
+        $this->assertIsString($script);
+        $maintenanceLogAt = strpos($script, 'Entering maintenance mode and draining existing application services.');
+        $maintenanceAt = strpos($script, "\n  enter_maintenance_mode\n", $maintenanceLogAt === false ? 0 : $maintenanceLogAt);
+        $stopAt = strpos($script, 'stop web app queue ai-quality-queue ai-quality-backfill-queue ai-optimization-queue knowledge-queue scheduler reverb');
+        $migrationAt = strpos($script, '"${COMPOSE[@]}" up init');
+        $resumeAt = strpos($script, 'php artisan up');
+        $internalHealthAt = strpos($script, "\n  run_healthcheck 1\n");
+        $resumeCallAt = strpos($script, "\n  resume_traffic\n");
+        $externalHealthAt = strpos($script, "\n  run_healthcheck 0\n");
+        $this->assertNotFalse($maintenanceLogAt);
+        $this->assertNotFalse($maintenanceAt);
+        $this->assertNotFalse($stopAt);
+        $this->assertNotFalse($migrationAt);
+        $this->assertNotFalse($resumeAt);
+        $this->assertNotFalse($internalHealthAt);
+        $this->assertNotFalse($resumeCallAt);
+        $this->assertNotFalse($externalHealthAt);
+        $this->assertLessThan($stopAt, $maintenanceAt);
+        $this->assertLessThan($migrationAt, $stopAt);
+        $this->assertLessThan($resumeAt, $migrationAt);
+        $this->assertLessThan($resumeCallAt, $internalHealthAt);
+        $this->assertLessThan($externalHealthAt, $resumeCallAt);
+        $this->assertStringNotContainsString('ps --all --services | grep -qx app', $script);
+        $this->assertStringNotContainsString('ps --status running --services | grep -qx app', $script);
+        $maintenanceFunctionAt = strpos($script, 'enter_maintenance_mode()');
+        $maintenanceFunctionEnd = strpos($script, "\n}\n", $maintenanceFunctionAt === false ? 0 : $maintenanceFunctionAt);
+        $this->assertNotFalse($maintenanceFunctionAt);
+        $this->assertNotFalse($maintenanceFunctionEnd);
+        $maintenanceBlock = substr($script, (int) $maintenanceFunctionAt, (int) $maintenanceFunctionEnd - (int) $maintenanceFunctionAt);
+        $this->assertStringContainsString('"${COMPOSE[@]}" run --rm --no-deps', $maintenanceBlock);
+        $this->assertStringContainsString('-e AUTO_WAIT_FOR_DB=false', $maintenanceBlock);
+        $this->assertStringContainsString('-e AUTO_MIGRATE=false', $maintenanceBlock);
+        $this->assertStringContainsString('-e AUTO_INSTALL_ONCE=false', $maintenanceBlock);
+        $this->assertStringContainsString('-e AUTO_OPTIMIZE=false', $maintenanceBlock);
+        $this->assertStringContainsString('if enter_maintenance_mode; then', $script);
+
+        $healthcheck = file_get_contents(dirname(__DIR__, 2).'/deploy-scripts/geoflow-healthcheck.sh');
+        $this->assertIsString($healthcheck);
+        $this->assertStringContainsString('GEOFLOW_SKIP_HTTP_CHECK', $healthcheck);
+        $this->assertStringContainsString('fail "HTTP health endpoint failed:', $healthcheck);
+    }
+
+    public function test_nginx_forwards_client_ip_chain_to_laravel_rate_limiters(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $nginxTemplate = file_get_contents($root.'/docker/nginx/default.conf.template');
+        $nginxApp = file_get_contents($root.'/docker/nginx/geoflow-app.conf');
+
+        $this->assertIsString($nginxTemplate);
+        $this->assertIsString($nginxApp);
+        $this->assertStringContainsString('listen 80 default_server;', $nginxTemplate);
+        $this->assertStringContainsString('server_name *.${GEOFLOW_NGINX_HOSTED_ROOT_DOMAIN};', $nginxTemplate);
+        $this->assertStringContainsString(
+            'fastcgi_param HTTP_X_FORWARDED_FOR $proxy_add_x_forwarded_for;',
+            $nginxApp
+        );
+        $this->assertStringContainsString(
+            'fastcgi_param HTTP_X_REAL_IP $remote_addr;',
+            $nginxApp
+        );
+        $this->assertStringContainsString('GEOFLOW_NGINX_PUBLIC_PORT', $nginxTemplate);
+        $this->assertStringContainsString('HTTP_X_FORWARDED_PORT $geoflow_forwarded_port', $nginxApp);
+        $this->assertStringContainsString('geoflow_hosted_surface', $nginxTemplate);
+        $this->assertStringContainsString('/__geoflow_host_must_resolve__', $nginxTemplate);
+        $wildcardServer = substr($nginxTemplate, strpos($nginxTemplate, 'server_name *.${GEOFLOW_NGINX_HOSTED_ROOT_DOMAIN};'));
+        $this->assertIsString($wildcardServer);
+        $this->assertStringNotContainsString('try_files $uri', $wildcardServer);
+        $this->assertStringContainsString('location / {', $wildcardServer);
+    }
+
+    public function test_php_fpm_concurrency_fits_the_application_memory_envelope(): void
+    {
+        $pool = file_get_contents(dirname(__DIR__, 2).'/docker/php-fpm/www.conf');
+
+        $this->assertIsString($pool);
+        $this->assertStringContainsString('pm.max_children = 5', $pool);
+        $this->assertStringContainsString('php_admin_value[memory_limit] = 128M', $pool);
     }
 }
